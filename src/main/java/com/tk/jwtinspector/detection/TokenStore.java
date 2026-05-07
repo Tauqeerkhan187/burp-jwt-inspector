@@ -7,6 +7,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
+ * Author: TK
+ * Date: 07-05-2026
  * Thread-safe store of detected tokens, deduplicated by raw token string.
  * Preserves insertion order for the most recent occurrence of each token.
  *
@@ -24,6 +26,19 @@ public class TokenStore {
     private final java.util.List<Consumer<DetectedToken>> listeners =
             new CopyOnWriteArrayList<>();
 
+    private final Map<String, java.util.List<com.tk.jwtinspector.detection.analysis.Finding>> findingsByToken =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private com.tk.jwtinspector.detection.analysis.TokenAnalyzer analyzer;
+
+    public void setAnalyzer(com.tk.jwtinspector.detection.analysis.TokenAnalyzer analyzer) {
+        this.analyzer = analyzer;
+    }
+
+    public java.util.List<com.tk.jwtinspector.detection.analysis.Finding> findingsFor(String rawToken) {
+        return findingsByToken.getOrDefault(rawToken, java.util.List.of());
+    }
+
     /**
      * Adds or refreshes a token. If the raw token already exists,
      * replaces its entry (keeping the latest source/url info).
@@ -33,12 +48,19 @@ public class TokenStore {
         boolean isNew;
         synchronized (tokens) {
             isNew = !tokens.containsKey(token.rawToken());
-            tokens.remove(token.rawToken()); // ensure re-insertion at end.
+            tokens.remove(token.rawToken());
             tokens.put(token.rawToken(), token);
         }
 
-        // Only notify on genuinely new tokens to avoid churn on every api call.
         if (isNew) {
+            // Analyze on detection (one-time cost per unique token)
+            if (analyzer != null) {
+                findingsByToken.put(
+                        token.rawToken(),
+                        analyzer.analyze(token.rawToken())
+                );
+            }
+
             SwingUtilities.invokeLater(() -> {
                 for (Consumer<DetectedToken> listener : listeners) {
                     listener.accept(token);
@@ -65,9 +87,9 @@ public class TokenStore {
         synchronized (tokens) {
             tokens.clear();
         }
+        findingsByToken.clear();
         SwingUtilities.invokeLater(() -> {
             for (Consumer<DetectedToken> listener : listeners) {
-                // just signal no token, listeners check size()
                 listener.accept(null);
             }
         });
