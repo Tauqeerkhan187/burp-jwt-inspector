@@ -3,9 +3,10 @@ package com.tk.jwtinspector;
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.logging.Logging;
-import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.JWTDetector;
 import com.tk.jwtinspector.detection.ProxyHttpHandler;
+import com.tk.jwtinspector.detection.TokenStore;
+import com.tk.jwtinspector.ui.JWTInspectorTab;
 
 public class JWTInspectorExtension implements BurpExtension {
 
@@ -15,28 +16,18 @@ public class JWTInspectorExtension implements BurpExtension {
 
         Logging logging = api.logging();
         logging.logToOutput("JWT Inspector loaded successfully.");
-        logging.logToOutput("Version: 0.2.0 (Phase 2 - detection");
+        logging.logToOutput("Version: 0.2.5 (Phase 2 — UI)");
 
+        TokenStore store = new TokenStore();
         JWTDetector detector = new JWTDetector();
 
-        ProxyHttpHandler handler = new ProxyHttpHandler(
-                detector,
-                token -> logging.logToOutput(formatDetection(token)),
-                logging
-        );
-
+        ProxyHttpHandler handler = new ProxyHttpHandler(detector, store::add, logging);
         api.proxy().registerRequestHandler(handler);
         api.proxy().registerResponseHandler(handler);
 
-        logging.logToOutput("Proxy handlers registered. Detection active.");
-    }
+        JWTInspectorTab tab = new JWTInspectorTab(store);
+        api.userInterface().registerSuiteTab("JWT Inspector", tab);
 
-    private String formatDetection(DetectedToken token) {
-        return String.format("[JWT] %s %s | %s in %s | %s",
-                token.httpMethod(),
-                token.url(),
-                token.source(),
-                token.sourceDetail(),
-                token.shortToken());
+        logging.logToOutput("UI tab registered. Detection active.");
     }
 }
