@@ -4,20 +4,22 @@ import burp.api.montoya.logging.Logging;
 import com.nimbusds.jwt.JWT;
 import com.nimbusds.jwt.JWTParser;
 import com.tk.jwtinspector.detection.analysis.checks.AlgNoneCheck;
+import com.tk.jwtinspector.detection.analysis.checks.KidInjectionCheck;
+import com.tk.jwtinspector.detection.analysis.checks.LongLifetimeCheck;
+import com.tk.jwtinspector.detection.analysis.checks.MissingClaimsCheck;
+import com.tk.jwtinspector.detection.analysis.checks.MissingExpirationCheck;
+import com.tk.jwtinspector.detection.analysis.checks.WeakAlgorithmCheck;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Author: TK
- * Date: 06-05-2026
  * Runs all registered vulnerability checks against a token and aggregates findings.
  *
- * This is a pure function from "raw token string" to "List of findings."
- * Stateless (safe to call from any thread).
+ * This is a pure function from "raw token string" to "list of findings."
+ * Stateless — safe to call from any thread.
  */
-
 public class TokenAnalyzer {
 
     private final List<VulnerabilityCheck> checks;
@@ -26,13 +28,18 @@ public class TokenAnalyzer {
     public TokenAnalyzer(Logging logging) {
         this.logging = logging;
         this.checks = List.of(
-                new AlgNoneCheck()
+                new AlgNoneCheck(),
+                new WeakAlgorithmCheck(),
+                new MissingExpirationCheck(),
+                new LongLifetimeCheck(),
+                new KidInjectionCheck(),
+                new MissingClaimsCheck()
         );
     }
 
     /**
      * Parses the raw token and runs every check against it.
-     * Returns empty list if the token can't be parsed or no findings are produced.
+     * Returns an empty list if the token can't be parsed or no findings are produced.
      */
     public List<Finding> analyze(String rawToken) {
         JWT jwt;
@@ -51,12 +58,10 @@ public class TokenAnalyzer {
                     all.addAll(result);
                 }
             } catch (Exception e) {
-                // isolating failures
-                logging.logToError("Check '" + check.id() + " ' threw: " + e.getMessage());
+                logging.logToError("Check '" + check.id() + "' threw: " + e.getMessage());
             }
         }
 
-        // Sort findings by severity (most severe first).
         all.sort((a, b) -> b.severity().compareTo(a.severity()));
         return all;
     }

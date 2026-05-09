@@ -17,7 +17,7 @@ public class JWTInspectorExtension implements BurpExtension {
 
         Logging logging = api.logging();
         logging.logToOutput("JWT Inspector loaded successfully.");
-        logging.logToOutput("Version: 0.3.0 (Phase 3 — Analysis)");
+        logging.logToOutput("Version: 0.3.5 (Phase 3 - full check suite)");
 
         TokenStore store = new TokenStore();
         TokenAnalyzer analyzer = new TokenAnalyzer(logging);
