@@ -6,13 +6,27 @@ import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import java.awt.BorderLayout;
 
-public class JWTInspectorTab extends JPanel{
+/**
+ * Author: TK
+ * Date: 04-05-2026
+ * Purpose:
+ */
+
+public class JWTInspectorTab extends JPanel {
 
     public JWTInspectorTab(TokenStore store) {
         setLayout(new BorderLayout());
 
         TokenDetailPanel detailPanel = new TokenDetailPanel();
-        TokenListPanel listPanel = new TokenListPanel(store, detailPanel::show);
+
+        // When a token is selected in the list, show it AND its findings
+        TokenListPanel listPanel = new TokenListPanel(store, token -> {
+            if (token == null) {
+                detailPanel.show(null, java.util.List.of());
+            } else {
+                detailPanel.show(token, store.findingsFor(token.rawToken()));
+            }
+        });
 
         JSplitPane split = new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
@@ -23,6 +37,5 @@ public class JWTInspectorTab extends JPanel{
         split.setResizeWeight(0.4);
 
         add(split, BorderLayout.CENTER);
-
     }
 }

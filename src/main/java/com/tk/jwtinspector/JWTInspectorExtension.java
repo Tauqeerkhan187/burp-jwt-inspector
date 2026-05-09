@@ -17,7 +17,7 @@ public class JWTInspectorExtension implements BurpExtension {
 
         Logging logging = api.logging();
         logging.logToOutput("JWT Inspector loaded successfully.");
-        logging.logToOutput("Version: 0.3.5 (Phase 3 - full check suite)");
+        logging.logToOutput("Version: 0.3.6 (Phase 3 - UI integration)");
 
         TokenStore store = new TokenStore();
         TokenAnalyzer analyzer = new TokenAnalyzer(logging);
@@ -27,20 +27,6 @@ public class JWTInspectorExtension implements BurpExtension {
         ProxyHttpHandler handler = new ProxyHttpHandler(detector, store::add, logging);
         api.proxy().registerRequestHandler(handler);
         api.proxy().registerResponseHandler(handler);
-
-        // Phase 3 verification: log findings as tokens are detected
-        store.addListener(token -> {
-            if (token == null) return;
-            var findings = store.findingsFor(token.rawToken());
-            if (findings.isEmpty()) return;
-            logging.logToOutput("=== Findings for token " + token.shortToken() + " ===");
-            for (var finding : findings) {
-                logging.logToOutput(String.format("  [%s] %s — %s",
-                        finding.severity().displayName(),
-                        finding.title(),
-                        finding.description().substring(0, Math.min(80, finding.description().length())) + "..."));
-            }
-        });
 
         JWTInspectorTab tab = new JWTInspectorTab(store);
         api.userInterface().registerSuiteTab("JWT Inspector", tab);

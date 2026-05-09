@@ -2,63 +2,81 @@ package com.tk.jwtinspector.ui;
 
 import com.nimbusds.jose.util.Base64URL;
 import com.tk.jwtinspector.detection.DetectedToken;
+import com.tk.jwtinspector.detection.analysis.Finding;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.border.Border;
+import javax.swing.ScrollPaneConstants;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.GridLayout;
+import java.util.List;
 
 /**
- * Displays a selected token's metadata, decoded header, Payload and signature.
- * Three monospace text areas, color-coded like jwt.io's debugger.
+ * Author: TK
+ * Date: 05-05-2026
+ * Right-hand panel: source metadata, decoded header/payload/signature,
+ * and findings for the selected token.
+ *
+ * Whole panel is scrollable so findings (which can be many) don't squeeze
+ * the JSON sections.
  */
-
 public class TokenDetailPanel extends JPanel {
 
     private final JTextArea metadataArea;
     private final JTextArea headerArea;
     private final JTextArea payloadArea;
     private final JTextArea signatureArea;
+    private final FindingsPanel findingsPanel;
 
     public TokenDetailPanel() {
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-        JPanel top = new JPanel ();
-        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+        JPanel inner = new JPanel();
+        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
+        inner.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         metadataArea = makeArea(3);
         metadataArea.setBackground(new Color(0x2D, 0x2D, 0x2D));
         metadataArea.setForeground(Color.LIGHT_GRAY);
-        top.add(labeled("Source", metadataArea));
-
-        JPanel sections = new JPanel(new GridLayout(3, 1, 0, 8));
+        inner.add(labeled("Source", metadataArea));
+        inner.add(Box.createVerticalStrut(8));
 
         headerArea = makeArea(6);
         headerArea.setForeground(new Color(0xFB, 0x01, 0x5B));
-        sections.add(labeled("Header (decoded)", headerArea));
+        inner.add(labeled("Header (decoded)", headerArea));
+        inner.add(Box.createVerticalStrut(8));
 
-        payloadArea = makeArea(10);
+        payloadArea = makeArea(8);
         payloadArea.setForeground(new Color(0xD6, 0x3A, 0xFF));
-        sections.add(labeled("Payload (decoded)", payloadArea));
+        inner.add(labeled("Payload (decoded)", payloadArea));
+        inner.add(Box.createVerticalStrut(8));
 
-        signatureArea = makeArea(4);
+        signatureArea = makeArea(3);
         signatureArea.setForeground(new Color(0x00, 0xB9, 0xF1));
-        sections.add(labeled("Signature (raw)", signatureArea));
+        inner.add(labeled("Signature (raw)", signatureArea));
+        inner.add(Box.createVerticalStrut(8));
 
-        add(top, BorderLayout.NORTH);
-        add(sections, BorderLayout.CENTER);
+        findingsPanel = new FindingsPanel();
+        findingsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        inner.add(findingsPanel);
+
+        // Whole detail view scrolls vertically
+        JScrollPane scroll = new JScrollPane(inner);
+        scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        add(scroll, BorderLayout.CENTER);
 
         clear();
-
     }
 
     private JTextArea makeArea(int rows) {
@@ -76,10 +94,12 @@ public class TokenDetailPanel extends JPanel {
         lbl.setFont(lbl.getFont().deriveFont(Font.BOLD));
         panel.add(lbl, BorderLayout.NORTH);
         panel.add(new JScrollPane(area), BorderLayout.CENTER);
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, panel.getPreferredSize().height));
         return panel;
     }
 
-    public void show(DetectedToken token) {
+    public void show(DetectedToken token, List<Finding> findings) {
         if (token == null) {
             clear();
             return;
@@ -98,14 +118,15 @@ public class TokenDetailPanel extends JPanel {
             headerArea.setText("[malformed: fewer than 2 segments]");
             payloadArea.setText("");
             signatureArea.setText("");
-            return;
+        } else {
+            headerArea.setText(decodeJsonSegment(parts[0]));
+            payloadArea.setText(decodeJsonSegment(parts[1]));
+            signatureArea.setText(parts.length >= 3 && !parts[2].isEmpty()
+                    ? parts[2]
+                    : "(empty — alg:none token)");
         }
 
-        headerArea.setText(decodeJsonSegment(parts[0]));
-        payloadArea.setText(decodeJsonSegment(parts[1]));
-        signatureArea.setText(parts.length >= 3 && !parts[2].isEmpty()
-                ? parts[2]
-                : "(empty — alg:none token)");
+        findingsPanel.show(findings);
     }
 
     private String decodeJsonSegment(String segment) {
@@ -117,10 +138,6 @@ public class TokenDetailPanel extends JPanel {
         }
     }
 
-    /**
-     * Minimal pretty-printer — adds line breaks after commas/braces.
-     * Avoids pulling in a JSON library just for formatting.
-     */
     private String prettyPrintJson(String json) {
         StringBuilder out = new StringBuilder();
         int indent = 0;
@@ -140,9 +157,7 @@ public class TokenDetailPanel extends JPanel {
                     indent = Math.max(0, indent - 1);
                     out.append("  ".repeat(indent)).append(c);
                 }
-                case ',' -> {
-                    out.append(c).append('\n').append("  ".repeat(indent));
-                }
+                case ',' -> out.append(c).append('\n').append("  ".repeat(indent));
                 case ':' -> out.append(c).append(' ');
                 default -> {
                     if (!Character.isWhitespace(c)) out.append(c);
@@ -157,11 +172,11 @@ public class TokenDetailPanel extends JPanel {
         headerArea.setText("");
         payloadArea.setText("");
         signatureArea.setText("");
+        findingsPanel.clear();
     }
 
     @Override
     public Dimension getPreferredSize() {
-        return new Dimension(500, 600);
-
+        return new Dimension(550, 700);
     }
 }

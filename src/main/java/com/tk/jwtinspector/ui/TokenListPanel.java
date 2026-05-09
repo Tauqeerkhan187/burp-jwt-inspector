@@ -16,20 +16,20 @@ public class TokenListPanel extends JPanel {
 
     private final DefaultListModel<DetectedToken> model = new DefaultListModel<>();
     private final JList<DetectedToken> list = new JList<>(model);
-    private final JLabel countLabel = new JLabel("0 tokens");
+    private final JLabel countLabel = new JLabel("0  tokens");
     private final TokenStore store;
 
     private static final DateTimeFormatter TIME_FMT =
             DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
 
     public TokenListPanel(TokenStore store, Consumer<DetectedToken> onSelect) {
-        this.store =  store;
+        this.store = store;
 
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setCellRenderer(new TokenCellRenderer());
+        list.setCellRenderer(new TokenCellRenderer(store));
         list.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         list.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
@@ -50,7 +50,7 @@ public class TokenListPanel extends JPanel {
         add(new JScrollPane(list), BorderLayout.CENTER);
 
         // Prime list with anything already in the store
-        for (DetectedToken t: store.snapshot()) {
+        for (DetectedToken t : store.snapshot()) {
             model.addElement(t);
         }
         updateCount();
@@ -86,17 +86,39 @@ public class TokenListPanel extends JPanel {
 
         private final JLabel topLabel = new JLabel();
         private final JLabel bottomLabel = new JLabel();
+        private final JLabel severityBadge = new JLabel();
+        private final TokenStore store;
 
-        TokenCellRenderer() {
-            setLayout(new java.awt.BorderLayout());
+        TokenCellRenderer(TokenStore store) {
+            this.store = store;
+            setLayout(new java.awt.BorderLayout(8, 0));
             setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
 
             topLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
             bottomLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 11));
             bottomLabel.setForeground(java.awt.Color.GRAY);
 
-            add(topLabel, java.awt.BorderLayout.NORTH);
-            add(bottomLabel, java.awt.BorderLayout.SOUTH);
+            severityBadge.setOpaque(true);
+            severityBadge.setForeground(java.awt.Color.WHITE);
+            severityBadge.setFont(severityBadge.getFont().deriveFont(Font.BOLD, 9f));
+            severityBadge.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 5));
+            severityBadge.setHorizontalAlignment(JLabel.CENTER);
+
+            JPanel textColumn = new JPanel();
+            textColumn.setLayout(new BoxLayout(textColumn, BoxLayout.Y_AXIS));
+            textColumn.setOpaque(false);
+            textColumn.add(topLabel);
+            textColumn.add(bottomLabel);
+
+            // Badge sits to the right of the text
+            JPanel badgeWrap = new JPanel();
+            badgeWrap.setLayout(new BoxLayout(badgeWrap, BoxLayout.Y_AXIS));
+            badgeWrap.setOpaque(false);
+            badgeWrap.add(severityBadge);
+            badgeWrap.add(Box.createVerticalGlue());
+
+            add(textColumn, java.awt.BorderLayout.CENTER);
+            add(badgeWrap, java.awt.BorderLayout.EAST);
         }
 
         @Override
@@ -121,6 +143,23 @@ public class TokenListPanel extends JPanel {
                     host));
             bottomLabel.setText(token.shortToken());
 
+            // Look up findings, find the highest severity
+            var findings = store.findingsFor(token.rawToken());
+            com.tk.jwtinspector.detection.analysis.Severity highest = null;
+            for (var f : findings) {
+                if (highest == null || f.severity().compareTo(highest) > 0) {
+                    highest = f.severity();
+                }
+            }
+
+            if (highest != null) {
+                severityBadge.setText(highest.displayName().toUpperCase());
+                severityBadge.setBackground(highest.color());
+                severityBadge.setVisible(true);
+            } else {
+                severityBadge.setVisible(false);
+            }
+
             if (isSelected) {
                 setBackground(list.getSelectionBackground());
                 topLabel.setForeground(list.getSelectionForeground());
@@ -135,5 +174,4 @@ public class TokenListPanel extends JPanel {
             return this;
         }
     }
-
 }
