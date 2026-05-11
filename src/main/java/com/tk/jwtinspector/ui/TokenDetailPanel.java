@@ -3,16 +3,11 @@ package com.tk.jwtinspector.ui;
 import com.nimbusds.jose.util.Base64URL;
 import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.analysis.Finding;
+import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
 
-import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.JLabel;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
-import javax.swing.ScrollPaneConstants;
+import javax.swing.*;
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -35,8 +30,15 @@ public class TokenDetailPanel extends JPanel {
     private final JTextArea payloadArea;
     private final JTextArea signatureArea;
     private final FindingsPanel findingsPanel;
+    private final JButton crackButton;
+    private final CrackingService crackingService;
+    private DetectedToken currentToken;
 
-    public TokenDetailPanel() {
+
+    public TokenDetailPanel(CrackingService crackingService) {
+        this.crackingService = crackingService;
+        this.crackButton = new JButton("Crack secret (HMAC tokens only)");
+
         setLayout(new BorderLayout());
 
         JPanel inner = new JPanel();
@@ -62,6 +64,18 @@ public class TokenDetailPanel extends JPanel {
         signatureArea = makeArea(3);
         signatureArea.setForeground(new Color(0x00, 0xB9, 0xF1));
         inner.add(labeled("Signature (raw)", signatureArea));
+        inner.add(Box.createVerticalStrut(8));
+
+        crackButton.setEnabled(false);
+        crackButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        crackButton.addActionListener(e -> openCrackDialog());
+
+        JPanel crackRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        crackRow.setOpaque(false);
+        crackRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        crackRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, crackButton.getPreferredSize().height));
+        crackRow.add(crackButton);
+        inner.add(crackRow);
         inner.add(Box.createVerticalStrut(8));
 
         findingsPanel = new FindingsPanel();
@@ -104,6 +118,8 @@ public class TokenDetailPanel extends JPanel {
             clear();
             return;
         }
+        this.currentToken = token;
+        crackButton.setEnabled(isHmacToken(token));
 
         metadataArea.setText(String.format(
                 "URL: %s%nMethod: %s%nFound in: %s (%s)",
@@ -112,6 +128,30 @@ public class TokenDetailPanel extends JPanel {
                 token.source(),
                 token.sourceDetail()
         ));
+
+        private boolean isHmacToken(DetectedToken token) {
+            try {
+                String[] parts = token.rawToken().split("\\.", -1);
+                if (parts.length < 2) return false;
+                String headerJson = com.nimbusds.jose.util.Base64URL.from(parts[0]).decodeToString();
+                return headerJson.contains("\"alg\":\"HS256\"")
+                        || headerJson.contains("\"alg\":\"HS384\"")
+                        || headerJson.contains("\"alg\":\"HS512\"")
+                        || headerJson.contains("\"alg\": \"HS256\"")
+                        || headerJson.contains("\"alg\": \"HS384\"")
+                        || headerJson.contains("\"alg\": \"HS512\"");
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        private void openCrackDialog() {
+            if (currentToken == null) return;
+            Window owner = SwingUtilities.getWindowAncestor(this);
+            CrackDialog dialog = new CrackDialog(owner, crackingService, currentToken);
+            dialog.startCracking();
+            dialog.setVisible(true);  // blocks until dialog is closed (modal)
+        }
 
         String[] parts = token.rawToken().split("\\.", -1);
         if (parts.length < 2) {
@@ -173,6 +213,8 @@ public class TokenDetailPanel extends JPanel {
         payloadArea.setText("");
         signatureArea.setText("");
         findingsPanel.clear();
+        crackButton.setEnabled(false);
+        this.currentToken = null;
     }
 
     @Override
