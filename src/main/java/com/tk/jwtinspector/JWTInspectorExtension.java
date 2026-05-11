@@ -7,13 +7,8 @@ import com.tk.jwtinspector.detection.JWTDetector;
 import com.tk.jwtinspector.detection.ProxyHttpHandler;
 import com.tk.jwtinspector.detection.TokenStore;
 import com.tk.jwtinspector.detection.analysis.TokenAnalyzer;
-import com.tk.jwtinspector.detection.analysis.crack.CrackResult;
-import com.tk.jwtinspector.detection.analysis.crack.SecretCracker;
-import com.tk.jwtinspector.detection.analysis.crack.WordlistLoader;
+import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
 import com.tk.jwtinspector.ui.JWTInspectorTab;
-
-import java.io.IOException;
-import java.util.List;
 
 /**
  * Entry point for the JWT Inspector Burp Suite extension.
@@ -33,7 +28,7 @@ public class JWTInspectorExtension implements BurpExtension {
 
         Logging logging = api.logging();
         logging.logToOutput("JWT Inspector loaded successfully.");
-        logging.logToOutput("Version: 0.4.0 (Phase 4.1 — secret cracking)");
+        logging.logToOutput("Version: 0.4.2 (Phase 4.2 — crack button UI)");
 
         // Detection + analysis
         TokenStore store = new TokenStore();
@@ -45,58 +40,14 @@ public class JWTInspectorExtension implements BurpExtension {
         api.proxy().registerRequestHandler(handler);
         api.proxy().registerResponseHandler(handler);
 
+        // Cracking service: load wordlist once at startup
+        CrackingService crackingService = new CrackingService(logging);
+        crackingService.loadBundled();
+
         // UI tab
-        JWTInspectorTab tab = new JWTInspectorTab(store);
+        JWTInspectorTab tab = new JWTInspectorTab(store, crackingService);
         api.userInterface().registerSuiteTab("JWT Inspector", tab);
 
-        logging.logToOutput("UI tab registered. Detection active.");
-
-        // -----------------------------------------------------------------
-        // Phase 4.1 verification harness — TEMPORARY.
-        // Auto-cracks every detected HMAC token against the bundled wordlist
-        // and logs the result. Will be removed in Phase 4.2 in favor of a
-        // user-initiated "Crack" button in the detail panel.
-        // -----------------------------------------------------------------
-        WordlistLoader loader = new WordlistLoader();
-        List<String> wordlist;
-        try {
-            wordlist = loader.loadBundled();
-            logging.logToOutput("Loaded " + wordlist.size()
-                    + " candidate secrets from bundled wordlist.");
-        } catch (IOException e) {
-            logging.logToError("Failed to load wordlist: " + e.getMessage());
-            wordlist = List.of();
-        }
-        final List<String> finalWordlist = wordlist;
-
-        store.addListener(token -> {
-            if (token == null || finalWordlist.isEmpty()) return;
-
-            // Only try cracking tokens flagged as using HMAC by our analyzer
-            var findings = store.findingsFor(token.rawToken());
-            boolean isHmac = findings.stream()
-                    .anyMatch(f -> f.title().contains("HMAC algorithm"));
-            if (!isHmac) return;
-
-            new Thread(() -> {
-                SecretCracker cracker = new SecretCracker();
-                CrackResult result = cracker.crack(token.rawToken(), finalWordlist, null);
-                switch (result.status()) {
-                    case FOUND -> logging.logToOutput(String.format(
-                            "[CRACKED] %s -> secret = '%s' (%d attempts, %d ms)",
-                            token.shortToken(),
-                            result.secret(),
-                            result.attemptCount(),
-                            result.durationMs()));
-                    case NOT_FOUND -> logging.logToOutput(String.format(
-                            "[NOT FOUND] %s — %d attempts in %d ms",
-                            token.shortToken(),
-                            result.attemptCount(),
-                            result.durationMs()));
-                    case CANCELLED -> logging.logToOutput("[CANCELLED] " + token.shortToken());
-                    case ERROR -> logging.logToOutput("[CRACK ERROR] " + token.shortToken());
-                }
-            }, "jwt-cracker-" + token.shortToken()).start();
-        });
+        logging.logToOutput("UI tab registered. Detection + cracking active.");
     }
 }

@@ -1,6 +1,7 @@
 package com.tk.jwtinspector.ui;
 
 import com.tk.jwtinspector.detection.TokenStore;
+import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
 
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
@@ -14,10 +15,10 @@ import java.awt.BorderLayout;
 
 public class JWTInspectorTab extends JPanel {
 
-    public JWTInspectorTab(TokenStore store) {
+    public JWTInspectorTab(TokenStore store, CrackingService crackingService) {
         setLayout(new BorderLayout());
 
-        TokenDetailPanel detailPanel = new TokenDetailPanel();
+        TokenDetailPanel detailPanel = new TokenDetailPanel(crackingService);
 
         // When a token is selected in the list, show it AND its findings
         TokenListPanel listPanel = new TokenListPanel(store, token -> {
