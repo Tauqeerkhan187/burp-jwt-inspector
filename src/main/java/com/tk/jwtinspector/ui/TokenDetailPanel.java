@@ -5,23 +5,34 @@ import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.analysis.Finding;
 import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
-import java.awt.FlowLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Window;
 import java.util.List;
 
 /**
- * Author: TK
- * Date: 05-05-2026
  * Right-hand panel: source metadata, decoded header/payload/signature,
- * and findings for the selected token.
+ * findings, and a Crack-secret action for HMAC-signed tokens.
  *
- * Whole panel is scrollable so findings (which can be many) don't squeeze
- * the JSON sections.
+ * @author TK
+ * @since 2026-05-10
+ *
+ * Purpose: Composes the detail view shown when a token is selected in
+ * the left-hand list. Owns the Crack button which opens CrackDialog.
  */
 public class TokenDetailPanel extends JPanel {
 
@@ -33,7 +44,6 @@ public class TokenDetailPanel extends JPanel {
     private final JButton crackButton;
     private final CrackingService crackingService;
     private DetectedToken currentToken;
-
 
     public TokenDetailPanel(CrackingService crackingService) {
         this.crackingService = crackingService;
@@ -66,14 +76,14 @@ public class TokenDetailPanel extends JPanel {
         inner.add(labeled("Signature (raw)", signatureArea));
         inner.add(Box.createVerticalStrut(8));
 
+        // Crack button row
         crackButton.setEnabled(false);
-        crackButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         crackButton.addActionListener(e -> openCrackDialog());
-
         JPanel crackRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         crackRow.setOpaque(false);
         crackRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        crackRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, crackButton.getPreferredSize().height));
+        crackRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                crackButton.getPreferredSize().height + 4));
         crackRow.add(crackButton);
         inner.add(crackRow);
         inner.add(Box.createVerticalStrut(8));
@@ -82,7 +92,6 @@ public class TokenDetailPanel extends JPanel {
         findingsPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         inner.add(findingsPanel);
 
-        // Whole detail view scrolls vertically
         JScrollPane scroll = new JScrollPane(inner);
         scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -118,6 +127,7 @@ public class TokenDetailPanel extends JPanel {
             clear();
             return;
         }
+
         this.currentToken = token;
         crackButton.setEnabled(isHmacToken(token));
 
@@ -128,30 +138,6 @@ public class TokenDetailPanel extends JPanel {
                 token.source(),
                 token.sourceDetail()
         ));
-
-        private boolean isHmacToken(DetectedToken token) {
-            try {
-                String[] parts = token.rawToken().split("\\.", -1);
-                if (parts.length < 2) return false;
-                String headerJson = com.nimbusds.jose.util.Base64URL.from(parts[0]).decodeToString();
-                return headerJson.contains("\"alg\":\"HS256\"")
-                        || headerJson.contains("\"alg\":\"HS384\"")
-                        || headerJson.contains("\"alg\":\"HS512\"")
-                        || headerJson.contains("\"alg\": \"HS256\"")
-                        || headerJson.contains("\"alg\": \"HS384\"")
-                        || headerJson.contains("\"alg\": \"HS512\"");
-            } catch (Exception e) {
-                return false;
-            }
-        }
-
-        private void openCrackDialog() {
-            if (currentToken == null) return;
-            Window owner = SwingUtilities.getWindowAncestor(this);
-            CrackDialog dialog = new CrackDialog(owner, crackingService, currentToken);
-            dialog.startCracking();
-            dialog.setVisible(true);  // blocks until dialog is closed (modal)
-        }
 
         String[] parts = token.rawToken().split("\\.", -1);
         if (parts.length < 2) {
@@ -205,6 +191,30 @@ public class TokenDetailPanel extends JPanel {
             }
         }
         return out.toString();
+    }
+
+    private boolean isHmacToken(DetectedToken token) {
+        try {
+            String[] parts = token.rawToken().split("\\.", -1);
+            if (parts.length < 2) return false;
+            String headerJson = Base64URL.from(parts[0]).decodeToString();
+            return headerJson.contains("\"alg\":\"HS256\"")
+                    || headerJson.contains("\"alg\":\"HS384\"")
+                    || headerJson.contains("\"alg\":\"HS512\"")
+                    || headerJson.contains("\"alg\": \"HS256\"")
+                    || headerJson.contains("\"alg\": \"HS384\"")
+                    || headerJson.contains("\"alg\": \"HS512\"");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void openCrackDialog() {
+        if (currentToken == null) return;
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        CrackDialog dialog = new CrackDialog(owner, crackingService, currentToken);
+        dialog.startCracking();
+        dialog.setVisible(true);
     }
 
     public void clear() {

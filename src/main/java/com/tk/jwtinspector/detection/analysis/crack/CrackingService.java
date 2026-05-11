@@ -64,6 +64,10 @@ public class CrackingService {
         return wordlistSourceRef.get();
     }
 
+    public int wordlistSize() {
+        return wordlistRef.get().size();
+    }
+
     /**
      * Returns a fresh SecretCracker.Each crack run gets its own cracker so
      * cancellation state doesn't leak between runs.
