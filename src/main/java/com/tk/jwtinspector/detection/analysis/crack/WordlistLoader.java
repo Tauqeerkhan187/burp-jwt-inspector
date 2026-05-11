@@ -22,7 +22,7 @@ import java.util.List;
 
 public class WordlistLoader {
 
-    private static final String BUNDLED_WORDLIST = "/wordlists/common-jwt-secrets.txt";
+    private static final String BUNDLED_WORDLIST = "/wordlists/jwt-secrets-combined.txt";
 
     /**
      * Loads the bundled default wordlist from the JAR resources.

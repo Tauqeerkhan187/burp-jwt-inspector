@@ -28,7 +28,7 @@ public class JWTInspectorExtension implements BurpExtension {
 
         Logging logging = api.logging();
         logging.logToOutput("JWT Inspector loaded successfully.");
-        logging.logToOutput("Version: 0.4.2 (Phase 4.2 — crack button UI)");
+        logging.logToOutput("Version: 0.4.3 (Phase 4.3 — wordlist polish)");
 
         // Detection + analysis
         TokenStore store = new TokenStore();

@@ -6,6 +6,7 @@ import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
 import com.tk.jwtinspector.detection.analysis.crack.SecretCracker;
 
 import javax.swing.*;
+import java.nio.file.Path;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.util.concurrent.atomic.AtomicLong;
@@ -30,11 +31,13 @@ public class CrackDialog extends JDialog {
     private final JLabel attemptsLabel = new JLabel(" ");
     private final JLabel rateLabel = new JLabel(" ");
     private final JLabel currentLabel = new JLabel(" ");
+    private final JLabel sourceLabel = new JLabel(" ");
     private final JProgressBar progressBar = new JProgressBar();
     private final JTextField secretField = new JTextField();
     private final JButton cancelButton = new JButton("Cancel");
     private final JButton closeButton = new JButton("Close");
     private final JButton copyButton = new JButton("Copy secret");
+    private final JButton browseButton = new JButton("Browse....");
 
     private SecretCracker activeCracker;
     private SwingWorker<CrackResult, Long> worker;
@@ -62,10 +65,16 @@ public class CrackDialog extends JDialog {
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
         header.add(title);
 
-        JLabel sourceLabel = new JLabel("Wordlist: " + service.wordlistSource());
+        JPanel sourceRow = new JPanel(new BorderLayout(8, 0));
+        sourceRow.setOpaque(false);
+        sourceRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         sourceLabel.setForeground(new Color(0x60, 0x60, 0x60));
-        sourceLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        header.add(sourceLabel);
+        sourceLabel.setText("Wordlist: " + service.wordlistSource());
+        sourceRow.add(sourceLabel, BorderLayout.CENTER);
+        sourceRow.add(browseButton, BorderLayout.EAST);
+        sourceRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                browseButton.getPreferredSize().height + 4));
+        header.add(sourceRow);
 
         root.add(header, BorderLayout.NORTH);
 
@@ -119,6 +128,7 @@ public class CrackDialog extends JDialog {
         root.add(buttons, BorderLayout.SOUTH);
 
         // Wiring
+        browseButton.addActionListener(e -> browseForWordlist());
         cancelButton.addActionListener(e -> {
             if (activeCracker != null) activeCracker.cancel();
             cancelButton.setEnabled(false);
@@ -140,12 +150,33 @@ public class CrackDialog extends JDialog {
         setSize(Math.max(520, getWidth()), getHeight());
     }
 
+    private void browseForWordlist() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Select wordlist file");
+        int result = chooser.showOpenDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) return;
+
+        Path path = chooser.getSelectedFile().toPath();
+        try {
+            service.loadFromFile(path);
+            sourceLabel.setText("Wordlist: " + service.wordlistSource());
+            progressBar.setMaximum(Math.max(1, service.wordlistSize()));
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Failed to load wordlist: " + ex.getMessage(),
+                    "Load error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     /**
      * Kicks off the crack. Called by the caller after constructing the dialog.
      * The dialog itself is shown with setVisible(true) — that call blocks until
      * the dialog is disposed (since it's modal).
      */
     public void startCracking() {
+        browseButton.setEnabled(true);
+
         if (service.wordlistSize() == 0) {
             statusLabel.setText("No wordlist loaded.");
             cancelButton.setVisible(false);
