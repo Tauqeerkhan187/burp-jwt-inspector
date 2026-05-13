@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.tk.jwtinspector"
-version = "0.4.3"
+version = "0.5.1"
 
 repositories {
     mavenCentral()
