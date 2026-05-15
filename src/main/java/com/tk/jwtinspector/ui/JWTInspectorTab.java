@@ -15,10 +15,10 @@ import java.awt.BorderLayout;
 
 public class JWTInspectorTab extends JPanel {
 
-    public JWTInspectorTab(TokenStore store, CrackingService crackingService) {
+    public JWTInspectorTab(TokenStore store, CrackingService crackingService, burp.api.montoya.logging.Logging logging) {
         setLayout(new BorderLayout());
 
-        TokenDetailPanel detailPanel = new TokenDetailPanel(crackingService);
+        TokenDetailPanel detailPanel = new TokenDetailPanel(crackingService, store, logging);
 
         // When a token is selected in the list, show it AND its findings
         TokenListPanel listPanel = new TokenListPanel(store, token -> {

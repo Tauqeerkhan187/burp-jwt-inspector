@@ -2,6 +2,7 @@ package com.tk.jwtinspector.ui;
 
 import com.nimbusds.jose.util.Base64URL;
 import com.tk.jwtinspector.detection.DetectedToken;
+import com.tk.jwtinspector.detection.TokenStore;
 import com.tk.jwtinspector.detection.analysis.Finding;
 import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
 
@@ -42,12 +43,18 @@ public class TokenDetailPanel extends JPanel {
     private final JTextArea signatureArea;
     private final FindingsPanel findingsPanel;
     private final JButton crackButton;
+    private final JButton forgeButton;
     private final CrackingService crackingService;
+    private final TokenStore store;
     private DetectedToken currentToken;
+    private final burp.api.montoya.logging.Logging logging;
 
-    public TokenDetailPanel(CrackingService crackingService) {
+    public TokenDetailPanel(CrackingService crackingService, TokenStore store, burp.api.montoya.logging.Logging logging) {
         this.crackingService = crackingService;
+        this.store = store;
+        this.logging = logging;
         this.crackButton = new JButton("Crack secret (HMAC tokens only)");
+        this.forgeButton = new JButton("Forge attack");
 
         setLayout(new BorderLayout());
 
@@ -79,13 +86,18 @@ public class TokenDetailPanel extends JPanel {
         // Crack button row
         crackButton.setEnabled(false);
         crackButton.addActionListener(e -> openCrackDialog());
-        JPanel crackRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        crackRow.setOpaque(false);
-        crackRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        crackRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+
+        forgeButton.setEnabled(false);
+        forgeButton.addActionListener(e -> openForgeDialog());
+
+        JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        actionRow.setOpaque(false);
+        actionRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        actionRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
                 crackButton.getPreferredSize().height + 4));
-        crackRow.add(crackButton);
-        inner.add(crackRow);
+        actionRow.add(crackButton);
+        actionRow.add(forgeButton);
+        inner.add(actionRow);
         inner.add(Box.createVerticalStrut(8));
 
         findingsPanel = new FindingsPanel();
@@ -130,6 +142,7 @@ public class TokenDetailPanel extends JPanel {
 
         this.currentToken = token;
         crackButton.setEnabled(isHmacToken(token));
+        forgeButton.setEnabled(true);
 
         metadataArea.setText(String.format(
                 "URL: %s%nMethod: %s%nFound in: %s (%s)",
@@ -212,8 +225,15 @@ public class TokenDetailPanel extends JPanel {
     private void openCrackDialog() {
         if (currentToken == null) return;
         Window owner = SwingUtilities.getWindowAncestor(this);
-        CrackDialog dialog = new CrackDialog(owner, crackingService, currentToken);
+        CrackDialog dialog = new CrackDialog(owner, crackingService, store, currentToken);
         dialog.startCracking();
+        dialog.setVisible(true);
+    }
+
+    private void openForgeDialog() {
+        if (currentToken == null) return;
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        ForgeDialog dialog = new ForgeDialog(owner, currentToken, store);
         dialog.setVisible(true);
     }
 
@@ -224,6 +244,7 @@ public class TokenDetailPanel extends JPanel {
         signatureArea.setText("");
         findingsPanel.clear();
         crackButton.setEnabled(false);
+        forgeButton.setEnabled(false);
         this.currentToken = null;
     }
 

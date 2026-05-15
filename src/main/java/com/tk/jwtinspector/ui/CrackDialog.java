@@ -1,6 +1,7 @@
 package com.tk.jwtinspector.ui;
 
 import com.tk.jwtinspector.detection.DetectedToken;
+import com.tk.jwtinspector.detection.TokenStore;
 import com.tk.jwtinspector.detection.analysis.crack.CrackResult;
 import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
 import com.tk.jwtinspector.detection.analysis.crack.SecretCracker;
@@ -26,6 +27,7 @@ public class CrackDialog extends JDialog {
 
     private final CrackingService service;
     private final DetectedToken token;
+    private final TokenStore store;
 
     private final JLabel statusLabel = new JLabel(" ");
     private final JLabel attemptsLabel = new JLabel(" ");
@@ -43,9 +45,10 @@ public class CrackDialog extends JDialog {
     private SwingWorker<CrackResult, Long> worker;
     private long startTime;
 
-    public CrackDialog(Window parent, CrackingService service, DetectedToken token) {
+    public CrackDialog(Window parent, CrackingService service, TokenStore store, DetectedToken token) {
         super(parent, "Crack JWT secret", ModalityType.APPLICATION_MODAL);
         this.service = service;
+        this.store = store;
         this.token = token;
 
         buildUI();
@@ -260,6 +263,10 @@ public class CrackDialog extends JDialog {
                         result.durationMs(),
                         result.attemptsPerSecond()));
                 rateLabel.setText(" ");
+
+                // Remember the secret so the ForgeDialog can pre-fill it
+                store.recordCrackedSecret(token.rawToken(), result.secret());
+
             }
             case NOT_FOUND -> {
                 statusLabel.setText("Secret not in wordlist.");

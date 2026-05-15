@@ -23,6 +23,9 @@ public class TokenStore {
     private final Map<String, DetectedToken> tokens =
             java.util.Collections.synchronizedMap(new LinkedHashMap<>());
 
+    private final Map<String, String> crackedSecrets =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     private final java.util.List<Consumer<DetectedToken>> listeners =
             new CopyOnWriteArrayList<>();
 
@@ -75,6 +78,14 @@ public class TokenStore {
         }
     }
 
+    public void recordCrackedSecret(String rawToken, String secret) {
+        crackedSecrets.put(rawToken, secret);
+    }
+
+    public String crackedSecretFor(String rawToken) {
+        return crackedSecrets.get(rawToken);
+    }
+
     public void addListener(Consumer<DetectedToken> listener) {
         listeners.add(listener);
     }
@@ -88,6 +99,7 @@ public class TokenStore {
             tokens.clear();
         }
         findingsByToken.clear();
+        crackedSecrets.clear();
         SwingUtilities.invokeLater(() -> {
             for (Consumer<DetectedToken> listener : listeners) {
                 listener.accept(null);
