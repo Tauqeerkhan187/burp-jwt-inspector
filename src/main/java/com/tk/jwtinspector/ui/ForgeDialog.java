@@ -1,5 +1,7 @@
 package com.tk.jwtinspector.ui;
 
+import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.requests.HttpRequest;
 import com.nimbusds.jose.util.Base64URL;
 import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.TokenStore;
@@ -32,25 +34,29 @@ import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
 
 /**
- * Modal dialog that lets the user generate forged tokens for the selected token.
+ * Modal dialog that lets the user generate forged tokens and send them
+ * straight to Burp's Repeater for replay.
  *
  * @author TK
  * @since 2026-05-11
  *
- * Purpose: Hosts three tabs, one per attack type. Each tab gathers inputs,
- * invokes TokenForger, shows the forged token with a Copy button. Pre-fills
- * cracked secrets from the TokenStore when available.
+ * Purpose: Hosts three tabs (alg:none, kid injection, claim tamper), each
+ * exposing Copy and Send-to-Repeater actions on the forged token. The
+ * Repeater action replaces the original request's Authorization header
+ * (or session cookie if no Authorization is present) with the forged token.
  */
 public class ForgeDialog extends JDialog {
 
     private final DetectedToken token;
     private final TokenStore store;
     private final TokenForger forger = new TokenForger();
+    private final MontoyaApi api;
 
-    public ForgeDialog(Window parent, DetectedToken token, TokenStore store) {
+    public ForgeDialog(Window parent, DetectedToken token, TokenStore store, MontoyaApi api) {
         super(parent, "Forge attack token", ModalityType.APPLICATION_MODAL);
         this.token = token;
         this.store = store;
+        this.api = api;
         buildUI();
         setLocationRelativeTo(parent);
     }
@@ -81,7 +87,7 @@ public class ForgeDialog extends JDialog {
 
         setContentPane(root);
         pack();
-        setSize(Math.max(700, getWidth()), Math.max(550, getHeight()));
+        setSize(Math.max(750, getWidth()), Math.max(600, getHeight()));
     }
 
     // ---- Tab 1: alg:none ----
@@ -115,8 +121,6 @@ public class ForgeDialog extends JDialog {
 
         @Override
         protected void buildInputs(JPanel inputs) {
-            // IMPORTANT: instantiate here, not as field initializers, because
-            // super(...) calls buildInputs before subclass field init runs.
             kidField = new JTextField("../../../dev/null", 30);
             secretField = new JTextField();
 
@@ -156,7 +160,6 @@ public class ForgeDialog extends JDialog {
 
         @Override
         protected void buildInputs(JPanel inputs) {
-            // IMPORTANT: instantiate here, not as field initializers.
             payloadArea = new JTextArea(8, 40);
             secretField = new JTextField();
 
@@ -175,8 +178,8 @@ public class ForgeDialog extends JDialog {
             inputs.add(secretField, gbc(1, 2, 1));
 
             JLabel hint = new JLabel(
-                    "<html><i>Tip: classic attack is flipping admin:false &rarr; admin:true. "
-                            + "Edit the JSON above, then click Generate.</i></html>");
+                    "<html><i>Tip: classic attack is flipping admin:false &rarr; admin:true, "
+                            + "or sub: user &rarr; sub: administrator. Edit JSON above, then Generate.</i></html>");
             hint.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
             inputs.add(hint, gbc(0, 3, 2));
         }
@@ -192,10 +195,11 @@ public class ForgeDialog extends JDialog {
 
     // ---- Shared base for the three tab panels ----
     private abstract class ForgeTab extends JPanel {
-        private final ForgeAttack attack;
+        protected final ForgeAttack attack;
         private final JTextArea outputArea = new JTextArea(4, 40);
         private final JButton generateButton = new JButton("Generate forged token");
         private final JButton copyButton = new JButton("Copy");
+        private final JButton sendToRepeaterButton = new JButton("Send to Repeater");
         private final JLabel statusLabel = new JLabel(" ");
         private final JTextArea warningsArea = new JTextArea(3, 40);
 
@@ -227,9 +231,11 @@ public class ForgeDialog extends JDialog {
             outputArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
             outputBlock.add(new JScrollPane(outputArea), BorderLayout.CENTER);
 
-            JPanel outputRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+            JPanel outputRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
             copyButton.setEnabled(false);
+            sendToRepeaterButton.setEnabled(false);
             outputRow.add(copyButton);
+            outputRow.add(sendToRepeaterButton);
             outputBlock.add(outputRow, BorderLayout.SOUTH);
 
             center.add(outputBlock, BorderLayout.CENTER);
@@ -257,6 +263,7 @@ public class ForgeDialog extends JDialog {
 
             generateButton.addActionListener(e -> onGenerate());
             copyButton.addActionListener(e -> onCopy());
+            sendToRepeaterButton.addActionListener(e -> onSendToRepeater());
         }
 
         protected abstract void buildInputs(JPanel inputs);
@@ -268,6 +275,7 @@ public class ForgeDialog extends JDialog {
                 outputArea.setText(result.forgedToken());
                 outputArea.setCaretPosition(0);
                 copyButton.setEnabled(true);
+                sendToRepeaterButton.setEnabled(token.originalRequest() != null);
                 statusLabel.setText("Forged successfully.");
                 statusLabel.setForeground(new Color(0x1A, 0x86, 0x1A));
 
@@ -279,6 +287,7 @@ public class ForgeDialog extends JDialog {
             } else {
                 outputArea.setText("");
                 copyButton.setEnabled(false);
+                sendToRepeaterButton.setEnabled(false);
                 statusLabel.setText("Failed: " + result.errorMessage());
                 statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
                 warningsArea.setText("");
@@ -293,6 +302,95 @@ public class ForgeDialog extends JDialog {
             Timer t = new Timer(1500, ev -> copyButton.setText(prev));
             t.setRepeats(false);
             t.start();
+        }
+
+        private void onSendToRepeater() {
+            HttpRequest original = token.originalRequest();
+            if (original == null) {
+                statusLabel.setText("No original request captured for this token.");
+                statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
+                return;
+            }
+
+            String forged = outputArea.getText();
+            if (forged.isEmpty()) {
+                statusLabel.setText("Generate a token first.");
+                return;
+            }
+
+            try {
+                HttpRequest modified = replaceTokenInRequest(original, forged);
+                String repeaterTabName = "JWT Inspector: " + attack.displayName();
+                api.repeater().sendToRepeater(modified, repeaterTabName);
+
+                statusLabel.setText("Sent to Repeater (tab \"" + repeaterTabName + "\").");
+                statusLabel.setForeground(new Color(0x1A, 0x86, 0x1A));
+            } catch (Throwable t) {
+                statusLabel.setText("Failed: " + t.getMessage());
+                statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
+            }
+        }
+
+        /**
+         * Returns a copy of `original` with the JWT replaced. We try to be smart:
+         *   - If Authorization header carried the token, swap it
+         *   - If a Cookie carried the token, splice it inside the cookie value
+         *   - Otherwise fall back to a body/URL string replace
+         */
+        private HttpRequest replaceTokenInRequest(HttpRequest original, String forged) {
+            String originalToken = token.rawToken();
+
+            switch (token.source()) {
+                case REQUEST_HEADER -> {
+                    String headerName = token.sourceDetail();
+                    if ("Authorization".equalsIgnoreCase(headerName)) {
+                        return original.withRemovedHeader("Authorization")
+                                .withAddedHeader("Authorization", "Bearer " + forged);
+                    }
+                    if ("Cookie".equalsIgnoreCase(headerName)) {
+                        String oldCookie = original.headerValue("Cookie");
+                        if (oldCookie != null && oldCookie.contains(originalToken)) {
+                            String newCookie = oldCookie.replace(originalToken, forged);
+                            return original.withRemovedHeader("Cookie")
+                                    .withAddedHeader("Cookie", newCookie);
+                        }
+                    }
+                    // generic custom header
+                    String oldValue = original.headerValue(headerName);
+                    if (oldValue != null && oldValue.contains(originalToken)) {
+                        String newValue = oldValue.replace(originalToken, forged);
+                        return original.withRemovedHeader(headerName)
+                                .withAddedHeader(headerName, newValue);
+                    }
+                }
+                case RESPONSE_HEADER, RESPONSE_BODY -> {
+                    // Token came from server; no obvious place to inject into the
+                    // initiating request. Try the cookie jar as a sensible default
+                    // since servers often set tokens via Set-Cookie that the client
+                    // then sends as Cookie.
+                    String oldCookie = original.headerValue("Cookie");
+                    if (oldCookie != null) {
+                        String newCookie = oldCookie.contains(originalToken)
+                                ? oldCookie.replace(originalToken, forged)
+                                : oldCookie + "; session=" + forged;
+                        return original.withRemovedHeader("Cookie")
+                                .withAddedHeader("Cookie", newCookie);
+                    }
+                    return original.withAddedHeader("Cookie", "session=" + forged);
+                }
+                case REQUEST_BODY, REQUEST_PARAM -> {
+                    // Fall through to body/URL string replace below
+                }
+            }
+
+            // Last-resort fallback: replace anywhere in the request body
+            String body = original.bodyToString();
+            if (body.contains(originalToken)) {
+                return original.withBody(body.replace(originalToken, forged));
+            }
+
+            // Couldn't find the token anywhere to substitute — append as Authorization
+            return original.withAddedHeader("Authorization", "Bearer " + forged);
         }
 
         protected GridBagConstraints gbc(int x, int y, int width) {

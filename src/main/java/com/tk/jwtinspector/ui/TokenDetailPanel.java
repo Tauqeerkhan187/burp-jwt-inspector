@@ -1,5 +1,7 @@
 package com.tk.jwtinspector.ui;
 
+import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.logging.Logging;
 import com.nimbusds.jose.util.Base64URL;
 import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.TokenStore;
@@ -27,13 +29,14 @@ import java.util.List;
 
 /**
  * Right-hand panel: source metadata, decoded header/payload/signature,
- * findings, and a Crack-secret action for HMAC-signed tokens.
+ * findings, and action buttons (Crack secret, Forge attack).
  *
  * @author TK
- * @since 2026-05-10
+ * @since 2026-05-11
  *
  * Purpose: Composes the detail view shown when a token is selected in
- * the left-hand list. Owns the Crack button which opens CrackDialog.
+ * the left-hand list. Owns the action buttons that open CrackDialog
+ * and ForgeDialog.
  */
 public class TokenDetailPanel extends JPanel {
 
@@ -46,13 +49,15 @@ public class TokenDetailPanel extends JPanel {
     private final JButton forgeButton;
     private final CrackingService crackingService;
     private final TokenStore store;
+    private final MontoyaApi api;
+    private final Logging logging;
     private DetectedToken currentToken;
-    private final burp.api.montoya.logging.Logging logging;
 
-    public TokenDetailPanel(CrackingService crackingService, TokenStore store, burp.api.montoya.logging.Logging logging) {
+    public TokenDetailPanel(CrackingService crackingService, TokenStore store, MontoyaApi api) {
         this.crackingService = crackingService;
         this.store = store;
-        this.logging = logging;
+        this.api = api;
+        this.logging = api.logging();
         this.crackButton = new JButton("Crack secret (HMAC tokens only)");
         this.forgeButton = new JButton("Forge attack");
 
@@ -83,7 +88,7 @@ public class TokenDetailPanel extends JPanel {
         inner.add(labeled("Signature (raw)", signatureArea));
         inner.add(Box.createVerticalStrut(8));
 
-        // Crack button row
+        // Action button row: Crack + Forge
         crackButton.setEnabled(false);
         crackButton.addActionListener(e -> openCrackDialog());
 
@@ -232,9 +237,13 @@ public class TokenDetailPanel extends JPanel {
 
     private void openForgeDialog() {
         if (currentToken == null) return;
-        Window owner = SwingUtilities.getWindowAncestor(this);
-        ForgeDialog dialog = new ForgeDialog(owner, currentToken, store);
-        dialog.setVisible(true);
+        try {
+            Window owner = SwingUtilities.getWindowAncestor(this);
+            ForgeDialog dialog = new ForgeDialog(owner, currentToken, store, api);
+            dialog.setVisible(true);
+        } catch (Throwable t) {
+            logging.logToError("Failed to open ForgeDialog: " + t);
+        }
     }
 
     public void clear() {

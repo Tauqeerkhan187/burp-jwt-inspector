@@ -16,9 +16,8 @@ import com.tk.jwtinspector.ui.JWTInspectorTab;
  * @author TK
  * @since 2026-05-09
  *
- * Purpose: Wires together the detection, analysis, cracking, forging, and UI
- * subsystems when the extension is loaded by Burp. Registers the proxy hooks
- * that observe HTTP traffic and the suite tab that displays results.
+ * Purpose: Wires together detection, analysis, cracking, forging, and
+ * Repeater-integration subsystems when Burp loads the extension.
  */
 public class JWTInspectorExtension implements BurpExtension {
 
@@ -28,9 +27,8 @@ public class JWTInspectorExtension implements BurpExtension {
 
         Logging logging = api.logging();
         logging.logToOutput("JWT Inspector loaded successfully.");
-        logging.logToOutput("Version: 0.5.2 (Phase 5.2 — forge dialog UI)");
+        logging.logToOutput("Version: 0.5.3 (Phase 5.3 — Send to Repeater)");
 
-        // Detection + analysis
         TokenStore store = new TokenStore();
         TokenAnalyzer analyzer = new TokenAnalyzer(logging);
         store.setAnalyzer(analyzer);
@@ -40,14 +38,12 @@ public class JWTInspectorExtension implements BurpExtension {
         api.proxy().registerRequestHandler(handler);
         api.proxy().registerResponseHandler(handler);
 
-        // Cracking service: load wordlist once at startup
         CrackingService crackingService = new CrackingService(logging);
         crackingService.loadBundled();
 
-        // UI tab
-        JWTInspectorTab tab = new JWTInspectorTab(store, crackingService, logging);
+        JWTInspectorTab tab = new JWTInspectorTab(store, crackingService, api);
         api.userInterface().registerSuiteTab("JWT Inspector", tab);
 
-        logging.logToOutput("UI tab registered. Detection + cracking + forging active.");
+        logging.logToOutput("UI tab registered. Detection + cracking + forging + Repeater active.");
     }
 }

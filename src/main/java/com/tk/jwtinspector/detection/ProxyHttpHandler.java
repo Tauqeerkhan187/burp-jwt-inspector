@@ -1,6 +1,7 @@
 package com.tk.jwtinspector.detection;
 
 import burp.api.montoya.http.message.HttpHeader;
+import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.logging.Logging;
 import burp.api.montoya.proxy.http.InterceptedRequest;
 import burp.api.montoya.proxy.http.InterceptedResponse;
@@ -16,12 +17,12 @@ import java.util.function.Consumer;
 
 /**
  * Hooks Burp's proxy. On every request and response, scans for JWTs
- * and pushes any found to the supplied consumer (the UI list).
+ * and pushes any found to the supplied consumer.
  *
- * returns *Continue* actions for everything. We are read-only -
- * we do not modify, drop, or intercept. We just observer.
+ * Read-only — returns continueWith for everything, never modifies traffic.
+ * Each detected token carries the request it rode on, so the UI's
+ * "Send to Repeater" feature can replay it later.
  */
-
 public class ProxyHttpHandler implements ProxyRequestHandler, ProxyResponseHandler {
 
     private final JWTDetector detector;
@@ -70,81 +71,74 @@ public class ProxyHttpHandler implements ProxyRequestHandler, ProxyResponseHandl
         String method = request.method();
         String url = request.url();
 
-        // Headers (Authorization, Cookie, custom auth headers)
         for (HttpHeader header : request.headers()) {
             String name = header.name();
             String value = header.value();
 
-            // Authorization: Bearer <jwt>
             if (name.equalsIgnoreCase("Authorization")) {
                 String normalized = JWTDetector.normalize(value);
                 if (detector.isJWT(normalized)) {
                     emit(normalized,
                             DetectedToken.TokenSource.REQUEST_HEADER,
                             "Authorization",
-                            method, url);
+                            method, url, request);
                 }
                 continue;
             }
 
-            // Cookie header — may contain multiple cookies, scan whole thing
             if (name.equalsIgnoreCase("Cookie")) {
                 for (String token : detector.findTokens(value)) {
                     emit(token,
                             DetectedToken.TokenSource.REQUEST_HEADER,
                             "Cookie",
-                            method, url);
+                            method, url, request);
                 }
                 continue;
             }
 
-            // Other headers — scan generically (catches X-Auth-Token, etc.)
             for (String token : detector.findTokens(value)) {
                 emit(token,
                         DetectedToken.TokenSource.REQUEST_HEADER,
                         name,
-                        method, url);
+                        method, url, request);
             }
         }
 
-        // Query string + body
         for (String token : detector.findTokens(url)) {
-            emit(token, DetectedToken.TokenSource.REQUEST_PARAM, "URL", method, url);
+            emit(token, DetectedToken.TokenSource.REQUEST_PARAM, "URL", method, url, request);
         }
 
         String body = request.bodyToString();
         for (String token : detector.findTokens(body)) {
-            emit(token, DetectedToken.TokenSource.REQUEST_BODY, "Body", method, url);
+            emit(token, DetectedToken.TokenSource.REQUEST_BODY, "Body", method, url, request);
         }
     }
 
     private void scanResponse(InterceptedResponse response) {
-        String method = response.initiatingRequest().method();
-        String url = response.initiatingRequest().url();
+        HttpRequest initiatingRequest = response.initiatingRequest();
+        String method = initiatingRequest.method();
+        String url = initiatingRequest.url();
 
-        // Set-Cookie often contains JWTs in session cookies
         for (HttpHeader header : response.headers()) {
             for (String token : detector.findTokens(header.value())) {
                 emit(token,
                         DetectedToken.TokenSource.RESPONSE_HEADER,
                         header.name(),
-                        method, url);
+                        method, url, initiatingRequest);
             }
         }
 
-        // Login responses often return JWTs in JSON body
         String body = response.bodyToString();
         for (String token : detector.findTokens(body)) {
-            emit(token, DetectedToken.TokenSource.RESPONSE_BODY, "Body", method, url);
+            emit(token, DetectedToken.TokenSource.RESPONSE_BODY, "Body", method, url, initiatingRequest);
         }
     }
 
     private void emit(String token, DetectedToken.TokenSource source,
-                      String detail, String method, String url) {
+                      String detail, String method, String url, HttpRequest request) {
         DetectedToken detected = new DetectedToken(
-                token, source, detail, method, url, Instant.now()
+                token, source, detail, method, url, Instant.now(), request
         );
         onTokenFound.accept(detected);
     }
-
 }
