@@ -84,28 +84,31 @@ The build uses Gradle Kotlin DSL with the Shadow plugin to produce a self-contai
 ---
 
 ## Architecture
+
+```text
 src/main/java/com/tk/jwtinspector/
 ├── JWTInspectorExtension.java        BurpExtension entry point; wires subsystems
 ├── detection/
-│   ├── DetectedToken.java            Record: token + source metadata + originating HttpRequest
+│   ├── DetectedToken.java            Record: token + source + originating HttpRequest
 │   ├── JWTDetector.java              Regex + Nimbus structural validation
 │   ├── ProxyHttpHandler.java         Read-only proxy hook (request + response)
-│   └── TokenStore.java               Dedup, EDT-safe listeners, findings cache, cracked-secret cache
+│   └── TokenStore.java               Dedup, EDT-safe listeners, cracked-secret cache
 └── detection/analysis/
-├── Finding.java                  Record with Severity enum (INFO/LOW/MEDIUM/HIGH/CRITICAL)
-├── VulnerabilityCheck.java       Stateless interface; never throws
-├── TokenAnalyzer.java            Runs all checks, returns severity-sorted findings
-├── checks/                       Six checks: AlgNone, WeakAlgorithm, MissingExpiration,
-│                                 LongLifetime, KidInjection, MissingClaims
-├── crack/
-│   ├── CrackResult.java          FOUND / NOT_FOUND / CANCELLED / ERROR
-│   ├── WordlistLoader.java       Reads bundled or user-supplied wordlists
-│   ├── SecretCracker.java        Parallel javax.crypto.Mac, constant-time compare
-│   └── CrackingService.java      Holds wordlist; factory for crackers
-└── forge/
-├── ForgeAttack.java          Enum: ALG_NONE, KID_INJECTION, CLAIM_TAMPER
-├── ForgedToken.java          Record with success/warnings/error
-└── TokenForger.java          Stateless engine; regex header manipulation
+    ├── Finding.java                  Record with Severity enum
+    ├── VulnerabilityCheck.java       Stateless interface; never throws
+    ├── TokenAnalyzer.java            Runs all checks; severity-sorted findings
+    ├── checks/                       AlgNone, WeakAlgorithm, MissingExpiration,
+    │                                 LongLifetime, KidInjection, MissingClaims
+    ├── crack/
+    │   ├── CrackResult.java          FOUND / NOT_FOUND / CANCELLED / ERROR
+    │   ├── WordlistLoader.java       Bundled and user-supplied wordlists
+    │   ├── SecretCracker.java        Parallel javax.crypto.Mac, constant-time
+    │   └── CrackingService.java      Holds wordlist; factory for crackers
+    └── forge/
+        ├── ForgeAttack.java          Enum: ALG_NONE, KID_INJECTION, CLAIM_TAMPER
+        ├── ForgedToken.java          Record with success/warnings/error
+        └── TokenForger.java          Stateless engine; regex header manipulation
+
 src/main/java/com/tk/jwtinspector/ui/
 ├── JWTInspectorTab.java              Top-level tab; split pane
 ├── TokenListPanel.java               Left list with severity badges
@@ -113,9 +116,11 @@ src/main/java/com/tk/jwtinspector/ui/
 ├── FindingsPanel.java                Severity-coloured finding cards
 ├── CrackDialog.java                  SwingWorker progress dialog
 └── ForgeDialog.java                  Tabbed forge dialog with Send to Repeater
+
 src/main/resources/
 ├── META-INF/services/burp.api.montoya.BurpExtension
 └── wordlists/jwt-secrets-combined.txt   103,789 entries
+```
 
 ### Notable engineering decisions
 
