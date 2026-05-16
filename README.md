@@ -175,7 +175,7 @@ This is a deliberately bounded portfolio project. Known limits and roadmap items
 
 ## Author
 
-Built by **Tauqeer Khan** as a portfolio piece for a Bachelor's in Cybersecurity. Reach out: [LinkedIn](https://www.linkedin.com/in/YOUR-LINKEDIN-HANDLE/).
+Built by **Tauqeer Khan** as a portfolio piece for a Bachelor's in Cybersecurity. Reach out: [LinkedIn](https://www.linkedin.com/in/tauqeer-khan-462385243/).
 
 ## Licence
 
