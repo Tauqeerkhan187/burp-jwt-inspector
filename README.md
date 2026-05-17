@@ -2,7 +2,7 @@
 
 A Burp Suite extension that automates the full JWT attack chain — **detect, analyse, crack, forge, replay** — from inside the proxy. Designed to take the friction out of JWT security testing and to teach as it goes.
 
-![Forged token accepted at /admin with HTTP/2 200 OK](docs/screenshots/01-repeater-200-ok.png)
+![Demo: full crack-to-Repeater chain in 90 seconds](docs/demo.gif)
 
 *Forged session cookie accepted by the PortSwigger Web Security Academy "JWT authentication bypass via weak signing key" lab — full chain executed through the extension's UI.*
 
