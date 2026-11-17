@@ -7,6 +7,8 @@ import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.TokenStore;
 import com.tk.jwtinspector.detection.analysis.Finding;
 import com.tk.jwtinspector.detection.analysis.crack.CrackingService;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jwt.JWTParser;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -213,16 +215,10 @@ public class TokenDetailPanel extends JPanel {
 
     private boolean isHmacToken(DetectedToken token) {
         try {
-            String[] parts = token.rawToken().split("\\.", -1);
-            if (parts.length < 2) return false;
-            String headerJson = Base64URL.from(parts[0]).decodeToString();
-            return headerJson.contains("\"alg\":\"HS256\"")
-                    || headerJson.contains("\"alg\":\"HS384\"")
-                    || headerJson.contains("\"alg\":\"HS512\"")
-                    || headerJson.contains("\"alg\": \"HS256\"")
-                    || headerJson.contains("\"alg\": \"HS384\"")
-                    || headerJson.contains("\"alg\": \"HS512\"");
-        } catch (Exception e) {
+            return JWSAlgorithm.Family.HMAC_SHA.contains(
+                    JWTParser.parse(token.rawToken()).getHeader().getAlgorithm());
+        }
+        catch (Exception e) {
             return false;
         }
     }
