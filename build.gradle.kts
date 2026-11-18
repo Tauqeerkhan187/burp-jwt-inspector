@@ -16,11 +16,19 @@ dependencies {
 
     // JWT parsing — handles malformed tokens better than jjwt
     implementation("com.nimbusds:nimbus-jose-jwt:10.0.2")
+
+    // Test depedencies and platform
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+}
+
+tasks.test{
+    useJUnitPlatform()
 }
 
 tasks.shadowJar {
