@@ -8,6 +8,8 @@ import com.tk.jwtinspector.detection.TokenStore;
 import com.tk.jwtinspector.detection.analysis.forge.ForgeAttack;
 import com.tk.jwtinspector.detection.analysis.forge.ForgedToken;
 import com.tk.jwtinspector.detection.analysis.forge.TokenForger;
+import com.tk.jwtinspector.detection.analysis.verify.ForgeVerifier;
+import com.tk.jwtinspector.detection.analysis.verify.VerificationResult;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -20,6 +22,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.Timer;
+import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -255,6 +258,7 @@ public class ForgeDialog extends JDialog {
         private final JButton generateButton = new JButton("Generate forged token");
         private final JButton copyButton = new JButton("Copy");
         private final JButton sendToRepeaterButton = new JButton("Send to Repeater");
+        private final JButton verifyButton = new JButton("Verify on server");
         private final JLabel statusLabel = new JLabel(" ");
         private final JTextArea warningsArea = new JTextArea(3, 40);
 
@@ -289,8 +293,13 @@ public class ForgeDialog extends JDialog {
             JPanel outputRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
             copyButton.setEnabled(false);
             sendToRepeaterButton.setEnabled(false);
+            verifyButton.setEnabled(false);
+            verifyButton.setToolTipText("Replays the forged token against the server and " 
+                    + "comapares the response to the real token. Most meaningful for a token "
+                    + " captured in request to a protected endpoint. ");
             outputRow.add(copyButton);
             outputRow.add(sendToRepeaterButton);
+            outputRow.add(verifyButton);
             outputBlock.add(outputRow, BorderLayout.SOUTH);
 
             center.add(outputBlock, BorderLayout.CENTER);
@@ -319,6 +328,8 @@ public class ForgeDialog extends JDialog {
             generateButton.addActionListener(e -> onGenerate());
             copyButton.addActionListener(e -> onCopy());
             sendToRepeaterButton.addActionListener(e -> onSendToRepeater());
+            verifyButton.addActionListener(e -> onVerify());
+
         }
 
         protected abstract void buildInputs(JPanel inputs);
@@ -331,6 +342,7 @@ public class ForgeDialog extends JDialog {
                 outputArea.setCaretPosition(0);
                 copyButton.setEnabled(true);
                 sendToRepeaterButton.setEnabled(token.originalRequest() != null);
+                verifyButton.setEnabled(token.originalRequest() != null);
                 statusLabel.setText("Forged successfully.");
                 statusLabel.setForeground(new Color(0x1A, 0x86, 0x1A));
 
@@ -343,6 +355,7 @@ public class ForgeDialog extends JDialog {
                 outputArea.setText("");
                 copyButton.setEnabled(false);
                 sendToRepeaterButton.setEnabled(false);
+                verifyButton.setEnabled(false);
                 statusLabel.setText("Failed: " + result.errorMessage());
                 statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
                 warningsArea.setText("");
@@ -385,6 +398,79 @@ public class ForgeDialog extends JDialog {
                 statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
             }
         }
+
+        private void onVerify() {
+
+            HttpRequest original = token.originalRequest();
+            if (original == null) {
+                statusLabel.setText("No original request captured for this token.");
+                statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
+                return;
+            }
+            String forged = outputArea.getText();
+            if (forged.isEmpty()) {
+                statusLabel.setText("Generate a token first.");
+                return;
+            }
+
+            HttpRequest attackRequest = replaceTokenInRequest(original, forged);
+
+
+            verifyButton.setEnabled(false);
+            statusLabel.setForeground(new Color(0x40, 0x60, 0x80));
+            statusLabel.setText("Replaying forged and original tokens against the server...");
+
+
+            ForgeVerifier verifier = new ForgeVerifier(api);
+            new SwingWorker<VerificationResult, Void>() {
+                @Override
+                protected VerificationResult doInBackground(){
+                    return verifier.verify(original, attackRequest);
+
+                }
+                @Override
+                protected void done(){
+                    verifyButton.setEnabled(true);
+                    try {
+                        showVerification(get());
+                    }
+                    catch(Exception ex) {
+                        statusLabel.setText("Verify failed: " + ex.getMessage());
+                        statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
+
+                    }
+                    
+                }
+                
+            }.execute();
+            
+        }
+
+        private void showVerification(VerificationResult r) {
+
+            switch (r.verdict()) {
+                case ACCEPTED -> {
+                    statusLabel.setText("ACCEPTED - " + r.detail());
+                    statusLabel.setForeground(new Color(0x1A, 0x86, 0x1A));
+                }
+
+                case REJECTED -> {
+                    statusLabel.setText("Rejected - " + r.detail());
+                    statusLabel.setForeground(new Color(0xC0, 0x40, 0x10));
+                }
+
+                case INCONCLUSIVE -> {
+                    statusLabel.setText("Inconclusive - " + r.detail());
+                    statusLabel.setForeground(new Color(0xE0, 0xA0, 0x10));
+                }
+                
+                case ERROR -> {
+                    statusLabel.setText("Error - " + r.detail());
+                    statusLabel.setForeground(new Color(0xC0, 0x10, 0x10));
+                }
+            }
+        }
+
 
         /**
          * Returns a copy of `original` with the JWT replaced. We try to be smart:
