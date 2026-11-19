@@ -35,9 +35,9 @@ public class CrackingService {
         try {
             List<String> entries = loader.loadBundled();
             wordlistRef.set(entries);
-            wordlistSourceRef.set("bundled (" + entries.size() + "entries)");
+            wordlistSourceRef.set("bundled (" + entries.size() + " entries)");
             logging.logToOutput("CrackingService: loaded "
-                     + entries.size() + "candidate secrets from bundled wordlist. ");
+                     + entries.size() + " candidate secrets from bundled wordlist. ");
         } catch (IOException e) {
             logging.logToError("CrackingService: failed to load bundled wordlist: " + e.getMessage());
         }
@@ -51,9 +51,9 @@ public class CrackingService {
         WordlistLoader loader = new WordlistLoader();
         List<String> entries = loader.loadFromFile(path);
         wordlistRef.set(entries);
-        wordlistSourceRef.set(path.getFileName() + "(" + entries.size() + " entries)");
+        wordlistSourceRef.set(path.getFileName() + " (" + entries.size() + " entries)");
         logging.logToOutput("CrackingService: loaded " +
-                  entries.size() + "candidates from " + path);
+                  entries.size() + " candidates from " + path);
     }
 
     public List<String> wordlist() {

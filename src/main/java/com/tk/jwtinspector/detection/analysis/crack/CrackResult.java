@@ -35,7 +35,7 @@ public record CrackResult(
     }
 
     public boolean isSuccess() {
-        return status == status.FOUND;
+        return status == Status.FOUND;
     }
 
     public double attemptsPerSecond() {

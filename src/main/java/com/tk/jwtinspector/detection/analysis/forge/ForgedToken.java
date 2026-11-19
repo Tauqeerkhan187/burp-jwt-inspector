@@ -1,6 +1,5 @@
 package com.tk.jwtinspector.detection.analysis.forge;
 
-import javax.print.DocFlavor;
 import java.util.List;
 
 /**

@@ -1,6 +1,5 @@
 package com.tk.jwtinspector.detection.analysis.forge;
 
-import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.util.Base64URL;
 import com.nimbusds.jose.util.JSONObjectUtils;
 
@@ -76,7 +75,7 @@ public class TokenForger {
             String macAlg = jcaName(header.alg());
             if (macAlg == null) {
                 return ForgedToken.failure(ForgeAttack.KID_INJECTION,
-                        "Algorith " + header.alg() + "is not HMAC; Kid injection requires HMAC re-signing");
+                        "Algorithm " + header.alg() + "is not HMAC; Kid injection requires HMAC re-signing");
             }
 
             // Re-sign header.payload with the secret

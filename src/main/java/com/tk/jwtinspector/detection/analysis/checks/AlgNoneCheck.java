@@ -6,7 +6,6 @@ import com.tk.jwtinspector.detection.analysis.Finding;
 import com.tk.jwtinspector.detection.analysis.Severity;
 import com.tk.jwtinspector.detection.analysis.VulnerabilityCheck;
 
-import javax.swing.event.ListDataEvent;
 import java.util.List;
 
 /**
@@ -42,7 +41,7 @@ public class AlgNoneCheck implements VulnerabilityCheck{
             if (algIsNone || isUnsignedAlgo) {
                 return List.of(Finding.of(
                         Severity.CRITICAL,
-                        "Unsigned token (alg: none",
+                        "Unsigned token (alg: none)",
                         "This token uses the 'none' algorithm, meaning it has no signature. "
                                           + "Any party can forge a token with arbitrary claims and the server "
                                           + "will accept it as valid. JWT libraries that fail to reject 'none' "
