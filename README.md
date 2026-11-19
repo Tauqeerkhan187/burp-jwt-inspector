@@ -1,3 +1,5 @@
+![CI](https://github.com/Tauqeerkhan187/burp-jwt-inspector/actions/workflows/ci.yml/badge.svg)
+
 # Burp JWT Inspector
 
 A Burp Suite extension that automates the full JWT attack chain — **detect, analyse, crack, forge, replay** — from inside the proxy. Designed to take the friction out of JWT security testing and to teach as it goes.
