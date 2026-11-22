@@ -137,11 +137,7 @@ public class ForgeDialog extends JDialog {
                     + "Often empty string for /dev/null traversal.");
             inputs.add(secretField, gbc(1, 1, 1));
 
-            JLabel hint = new JLabel(
-                    "<html><i>Common payloads: ../../../dev/null, x' UNION SELECT 'AAA, "
-                            + "$(id), %00</i></html>");
-            hint.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
-            inputs.add(hint, gbc(0, 2, 2));
+            inputs.add(hint("Common payloads: ../../../dev/null, x' UNION SELECT 'AAA, $(id), %00"), gbc(0, 2, 2));
         }
 
         @Override
@@ -181,11 +177,11 @@ public class ForgeDialog extends JDialog {
             secretField.setText(crackedSecretOrEmpty());
             inputs.add(secretField, gbc(1, 2, 1));
 
-            JLabel hint = new JLabel(
-                    "<html><i>Tip: classic attack is flipping admin:false &rarr; admin:true, "
-                            + "or sub: user &rarr; sub: administrator. Edit JSON above, then Generate.</i></html>");
-            hint.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
-            inputs.add(hint, gbc(0, 3, 2));
+
+            inputs.add(hint("Tip: classic attack is flipping admin:false → admin:true, "
+                + "or sub: user → sub: administrator. Edit JSON above, then Generate."),
+        gbc(0, 3, 2));
+
         }
 
         @Override
@@ -233,13 +229,11 @@ public class ForgeDialog extends JDialog {
             payloadScroll.setPreferredSize(new Dimension(500, 120));
             inputs.add(payloadScroll, gbc(0, 3, 2));
 
-            JLabel hint = new JLabel(
-                    "<html><i>Get the key from the JWKS endpoint (/.well-known/jwks.json), "
-                        + "the TLS cert, or recover it from two captured tokens (rsa_sign2n). "
-                        + "If it fails, retry with/without a trailing newline.</i></html>");
+            inputs.add(hint("Get the key from the JWKS endpoint (/.well-known/jwks.json), "
+                + "the TLS cert, or recover it from two captured tokens (rsa_sign2n). "
+                + "If it fails, retry with/without a trailing newline."),
+        gbc(0, 4, 2));
 
-            hint.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
-            inputs.add(hint, gbc(0, 4, 2));
         }
 
         @Override
@@ -544,6 +538,22 @@ public class ForgeDialog extends JDialog {
             c.anchor = GridBagConstraints.WEST;
             c.insets = new Insets(4, 4, 4, 4);
             return c;
+        }
+
+        /** Small italic, wrapping, read-only hint text. Plain text only: Burp's
+ *  look-and-feel doesn't render HTML in labels, so <html> tags show raw. */
+
+        protected JTextArea hint(String text) {
+            JTextArea area = new JTextArea(text, 0, 40);
+            area.setEditable(false);
+            area.setLineWrap(true);
+            area.setWrapStyleWord(true);
+            area.setOpaque(false);
+            area.setFont(area.getFont().deriveFont(Font.ITALIC, 11f));
+            area.setForeground(new Color(0x60, 0x60, 0x60));
+            area.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+            return area;
+
         }
     }
 
