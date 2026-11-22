@@ -19,9 +19,6 @@ import static com.tk.jwtinspector.detection.analysis.verify.VerificationResult.V
 
 public class ForgeVerifier {
 
-    // Bodies whose sizes differ by less than this fraction count as "about the same".
-    private static final double LENGTH_TOLERANCE = 0.05;
-
     private final MontoyaApi api;
 
     public ForgeVerifier(MontoyaApi api) {
@@ -44,7 +41,7 @@ public class ForgeVerifier {
             int baseLen = baseline.body().length();
             int forgedLen = forged.body().length();
 
-            Verdict verdict = classify(baseStatus, forgedStatus, baseLen, forgedLen);
+            Verdict verdict = VerdictClassifier.classify(baseStatus, forgedStatus, baseLen, forgedLen);
             return new VerificationResult(verdict, baseStatus, forgedStatus, baseLen, forgedLen, describe(verdict, baseStatus, forgedStatus, baseLen, forgedLen));
 
         }
@@ -52,25 +49,6 @@ public class ForgeVerifier {
             return new VerificationResult(Verdict.ERROR, -1, -1, -1, -1, "Request failed: " + e.getMessage());
 
         }
-    }
-
-    private Verdict classify(int base, int forged, int baseLen, int forgedLen) {
-
-        //Clear auth failure
-        if (forged == 401 || forged == 403) return Verdict.REJECTED;
-        // Bounced to login when real token wasn't
-        if ((forged == 301 || forged == 302) && base != forged) return Verdict.REJECTED;
-        // Same status as the authenticated baseline and a similar-sized body.
-        if (forged == base && similarSize(baseLen, forgedLen)) return Verdict.ACCEPTED;
-        return Verdict.INCONCLUSIVE;
-
-    }
-
-    private boolean similarSize(int a, int b) {
-
-        int max = Math.max(a, b);
-        return max == 0 || Math.abs(a - b) <= max * LENGTH_TOLERANCE;
-
     }
 
     private String describe(Verdict v, int base, int forged, int baseLen, int forgedLen) {
