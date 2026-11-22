@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.tk.jwtinspector"
-version = "0.5.3"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -32,8 +32,15 @@ tasks.test{
 }
 
 tasks.shadowJar {
+    archiveBaseName.set("jwt-inspector")
     archiveClassifier.set("")
-    archiveBaseName.set("burp-jwt-inspector")
+    manifest {
+        attributes("Implementation-Version" to project.version)
+    }
+}
+
+tasks.jar {
+    enabled = false
 }
 
 tasks.build {
