@@ -1,7 +1,9 @@
 package com.tk.jwtinspector.ui;
 
+
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.HttpService;
 import com.nimbusds.jose.util.Base64URL;
 import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.TokenStore;
@@ -10,6 +12,8 @@ import com.tk.jwtinspector.detection.analysis.forge.ForgedToken;
 import com.tk.jwtinspector.detection.analysis.forge.TokenForger;
 import com.tk.jwtinspector.detection.analysis.verify.ForgeVerifier;
 import com.tk.jwtinspector.detection.analysis.verify.VerificationResult;
+import com.tk.jwtinspector.detection.analysis.jwks.JwksFetcher;
+import com.tk.jwtinspector.detection.analysis.jwks.JwksKeys;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -23,6 +27,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.Timer;
 import javax.swing.SwingWorker;
+import java.util.List;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -197,6 +202,7 @@ public class ForgeDialog extends JDialog {
     private class AlgConfusionTab extends ForgeTab {
         private JTextArea pubKeyArea;
         private JTextArea payloadArea;
+        private JButton fetchButton;
 
         AlgConfusionTab() {
             super(ForgeAttack.ALG_CONFUSION);
@@ -213,7 +219,17 @@ public class ForgeDialog extends JDialog {
                     "incl. the BEGIN/END lines and a trailing newline."
                     );
 
-            inputs.add(new JLabel("Server public key (PEM):"), gbc(0, 0, 2));
+            fetchButton = new JButton("Fetch key from server");
+            fetchButton.setToolTipText("Downloads the server's JWKS (/.well-known/jwks.json, then /jwks.json) "
+                + "and fills in the public key that matches this token's kid.");
+            fetchButton.setEnabled(token.originalRequest() != null);
+            fetchButton.addActionListener(e -> onFetchKey());
+
+            JPanel keyHeader = new JPanel(new BorderLayout());
+            keyHeader.add(new JLabel("Server public key (PEM):"), BorderLayout.WEST);
+            keyHeader.add(fetchButton, BorderLayout.EAST);
+            inputs.add(keyHeader, gbc(0, 0, 2));
+
             JScrollPane keyScroll = new JScrollPane(pubKeyArea);
             keyScroll.setPreferredSize(new Dimension(500, 120));
             inputs.add(keyScroll, gbc(0, 1, 2));
@@ -243,6 +259,48 @@ public class ForgeDialog extends JDialog {
                     pubKeyArea.getText(),
                     payloadArea.getText());
         }
+
+        private void onFetchKey() {
+    HttpRequest original = token.originalRequest();
+    if (original == null) {
+        setStatus("No original request captured, so the server's host is unknown.",
+                new Color(0xC0, 0x10, 0x10));
+        return;
+    }
+
+    HttpService service = original.httpService();
+    List<String> urls = JwksKeys.defaultUrls(service.secure(), service.host(), service.port());
+    String kid = JwksKeys.kidOf(token.rawToken());
+
+    fetchButton.setEnabled(false);
+    setStatus("Fetching JWKS from " + service.host() + "...", new Color(0x40, 0x60, 0x80));
+
+    JwksFetcher fetcher = new JwksFetcher(api);
+    new SwingWorker<JwksFetcher.Result, Void>() {
+        @Override
+        protected JwksFetcher.Result doInBackground() {
+            return fetcher.fetchPem(urls, kid);
+        }
+
+        @Override
+        protected void done() {
+            fetchButton.setEnabled(true);
+            try {
+                JwksFetcher.Result r = get();
+                if (r.ok()) {
+                    pubKeyArea.setText(r.pem());
+                    pubKeyArea.setCaretPosition(0);
+                    setStatus("Loaded public key from " + r.sourceUrl(), new Color(0x1A, 0x86, 0x1A));
+                } else {
+                    setStatus(r.error(), new Color(0xC0, 0x10, 0x10));
+                }
+            } catch (Exception ex) {
+                setStatus("Fetch failed: " + ex.getMessage(), new Color(0xC0, 0x10, 0x10));
+            }
+        }
+    }.execute();
+}
+
     }
 
     // ---- Shared base for the three tab panels ----
@@ -311,12 +369,12 @@ public class ForgeDialog extends JDialog {
 
             add(center, BorderLayout.CENTER);
 
-            JPanel bottom = new JPanel(new BorderLayout(8, 0));
+            JPanel bottom = new JPanel(new BorderLayout(0, 6));
             statusLabel.setForeground(new Color(0x40, 0x60, 0x80));
-            bottom.add(statusLabel, BorderLayout.WEST);
+            bottom.add(statusLabel, BorderLayout.NORTH);
             JPanel genRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
             genRow.add(generateButton);
-            bottom.add(genRow, BorderLayout.EAST);
+            bottom.add(genRow, BorderLayout.SOUTH);
             add(bottom, BorderLayout.SOUTH);
 
             generateButton.addActionListener(e -> onGenerate());
@@ -554,6 +612,13 @@ public class ForgeDialog extends JDialog {
             area.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
             return area;
 
+        }
+
+        /** Lets subclasses report progress in the shared status line. */
+        protected void setStatus(String text, Color color) {
+            statusLabel.setText(text);
+            statusLabel.setForeground(color);
+            statusLabel.setToolTipText(text);
         }
     }
 
