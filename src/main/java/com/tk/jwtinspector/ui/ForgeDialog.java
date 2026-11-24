@@ -264,7 +264,7 @@ public class ForgeDialog extends JDialog {
                     payloadArea.getText());
         }
 
-        private void onFetchKey() {
+            private void onFetchKey() {
             HttpRequest original = token.originalRequest();
             if (original == null) {
                 setStatus("No original request captured, so the server's host is unknown.",
@@ -283,33 +283,30 @@ public class ForgeDialog extends JDialog {
             new SwingWorker<JwksFetcher.Result, Void>() {
                 @Override
                 protected JwksFetcher.Result doInBackground() {
-                return fetcher.fetchPem(urls, kid);
-            
-            }
+                    return fetcher.fetchPem(urls, kid);
+                }
 
-            @Override
-            protected void done() {
-                fetchButton.setEnabled(true);
-                try {
-                    JwksFetcher.Result r = get();
-                    if (r.ok()) {
-                        pubKeyArea.setText(r.pem());
-                        pubKeyArea.setCaretPosition(0);
-                        setStatus("Loaded public key from " + r.sourceUrl(), new Color(0x1A, 0x86, 0x1A));
-                    } 
-                    else {
-                        setStatus(r.error(), new Color(0xC0, 0x10, 0x10));
+                @Override
+                protected void done() {
+                    fetchButton.setEnabled(true);
+                    try {
+                        JwksFetcher.Result r = get();
+                        if (r.ok()) {
+                            pubKeyArea.setText(r.pem());
+                            pubKeyArea.setCaretPosition(0);
+                            setStatus("Loaded public key from " + r.sourceUrl(), new Color(0x1A, 0x86, 0x1A));
+                        } else {
+                            setStatus(r.error(), new Color(0xC0, 0x10, 0x10));
+                        }
+                    } catch (Exception ex) {
+                        setStatus("Fetch failed: " + ex.getMessage(), new Color(0xC0, 0x10, 0x10));
                     }
-            
-                } 
-                catch (Exception ex) {
-                setStatus("Fetch failed: " + ex.getMessage(), new Color(0xC0, 0x10, 0x10));
-            }
+                }
+            }.execute();
         }
-    }.execute();
-        }
-    
-        // ---- Tab 5: JWK header injection ----
+    }
+
+    // ---- Tab 5: JWK header injection ----
     private class JwkInjectionTab extends ForgeTab {
         private JTextArea payloadArea;
         private RSAKey attackerKey;   // created on first Generate, then reused
@@ -350,7 +347,6 @@ public class ForgeDialog extends JDialog {
         }
     }
 
-}
     // ---- Shared base for the three tab panels ----
     private abstract class ForgeTab extends JPanel {
         protected final ForgeAttack attack;
