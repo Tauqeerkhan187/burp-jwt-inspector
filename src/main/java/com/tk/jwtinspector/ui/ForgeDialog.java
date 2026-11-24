@@ -27,6 +27,7 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.Timer;
 import javax.swing.SwingWorker;
+import javax.swing.ScrollPaneConstants;
 import java.util.List;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -261,40 +262,44 @@ public class ForgeDialog extends JDialog {
         }
 
         private void onFetchKey() {
-    HttpRequest original = token.originalRequest();
-    if (original == null) {
-        setStatus("No original request captured, so the server's host is unknown.",
-                new Color(0xC0, 0x10, 0x10));
-        return;
-    }
+            HttpRequest original = token.originalRequest();
+            if (original == null) {
+                setStatus("No original request captured, so the server's host is unknown.",
+                        new Color(0xC0, 0x10, 0x10));
+                return;
+            }
 
-    HttpService service = original.httpService();
-    List<String> urls = JwksKeys.defaultUrls(service.secure(), service.host(), service.port());
-    String kid = JwksKeys.kidOf(token.rawToken());
+            HttpService service = original.httpService();
+            List<String> urls = JwksKeys.defaultUrls(service.secure(), service.host(), service.port());
+            String kid = JwksKeys.kidOf(token.rawToken());
 
-    fetchButton.setEnabled(false);
-    setStatus("Fetching JWKS from " + service.host() + "...", new Color(0x40, 0x60, 0x80));
+            fetchButton.setEnabled(false);
+            setStatus("Fetching JWKS from " + service.host() + "...", new Color(0x40, 0x60, 0x80));
 
-    JwksFetcher fetcher = new JwksFetcher(api);
-    new SwingWorker<JwksFetcher.Result, Void>() {
-        @Override
-        protected JwksFetcher.Result doInBackground() {
-            return fetcher.fetchPem(urls, kid);
-        }
+            JwksFetcher fetcher = new JwksFetcher(api);
+            new SwingWorker<JwksFetcher.Result, Void>() {
+                @Override
+                protected JwksFetcher.Result doInBackground() {
+                return fetcher.fetchPem(urls, kid);
+            
+            }
 
-        @Override
-        protected void done() {
-            fetchButton.setEnabled(true);
-            try {
-                JwksFetcher.Result r = get();
-                if (r.ok()) {
-                    pubKeyArea.setText(r.pem());
-                    pubKeyArea.setCaretPosition(0);
-                    setStatus("Loaded public key from " + r.sourceUrl(), new Color(0x1A, 0x86, 0x1A));
-                } else {
-                    setStatus(r.error(), new Color(0xC0, 0x10, 0x10));
-                }
-            } catch (Exception ex) {
+            @Override
+            protected void done() {
+                fetchButton.setEnabled(true);
+                try {
+                    JwksFetcher.Result r = get();
+                    if (r.ok()) {
+                        pubKeyArea.setText(r.pem());
+                        pubKeyArea.setCaretPosition(0);
+                        setStatus("Loaded public key from " + r.sourceUrl(), new Color(0x1A, 0x86, 0x1A));
+                    } 
+                    else {
+                        setStatus(r.error(), new Color(0xC0, 0x10, 0x10));
+                    }
+            
+                } 
+                catch (Exception ex) {
                 setStatus("Fetch failed: " + ex.getMessage(), new Color(0xC0, 0x10, 0x10));
             }
         }
@@ -328,7 +333,7 @@ public class ForgeDialog extends JDialog {
             desc.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
             add(desc, BorderLayout.NORTH);
 
-            JPanel center = new JPanel(new BorderLayout(0, 8));
+            JPanel center = new WidthTrackingPanel(new BorderLayout(0, 8));
 
             JPanel inputs = new JPanel(new GridBagLayout());
             buildInputs(inputs);
@@ -367,7 +372,10 @@ public class ForgeDialog extends JDialog {
             warningsBlock.add(warningsArea, BorderLayout.CENTER);
             center.add(warningsBlock, BorderLayout.SOUTH);
 
-            add(center, BorderLayout.CENTER);
+            JScrollPane centerScroll = new JScrollPane(center, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+            centerScroll.setBorder(null);
+            centerScroll.getVerticalScrollBar().setUnitIncrement(16);
+            add(centerScroll, BorderLayout.CENTER);
 
             JPanel bottom = new JPanel(new BorderLayout(0, 6));
             statusLabel.setForeground(new Color(0x40, 0x60, 0x80));
