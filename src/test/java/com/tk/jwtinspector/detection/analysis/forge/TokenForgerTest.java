@@ -24,10 +24,14 @@ package com.tk.jwtinspector.detection.analysis.forge;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.util.Base64URL;
 import com.nimbusds.jose.util.JSONObjectUtils;
+import com.nimbusds.jose.jwk.JWK;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 
@@ -45,6 +49,13 @@ class TokenForgerTest {
     // Nimbus MACSigner requires a >= 32-byte secret for HS256.
 
     private static final String SECRET = "test-secret-at-least-32-bytes-long!";
+    private static RSAKey attackerKey;
+
+    @BeforeAll
+    static void generateAttackerKey() throws Exception {
+        attackerKey = TokenForger.newAttackerKey();
+
+    }
 
     private final TokenForger forger = new TokenForger();
 
@@ -160,4 +171,44 @@ class TokenForgerTest {
         assertFalse(f.success());
 
     }
+    
+    @Test
+    void jwkInjection_embedsPublicKey_andSignatureVerifiesWithIt() throws Exception {
+        ForgedToken f = forger.forgeJwkInjection(hs256(SECRET), attackerKey, null);
+        assertTrue(f.success(), f.errorMessage());
+
+        SignedJWT forged = SignedJWT.parse(f.forgedToken());
+        assertEquals(JWSAlgorithm.RS256, forged.getHeader().getAlgorithm());
+        assertEquals(attackerKey.getKeyID(), forged.getHeader().getKeyID());
+
+        JWK embedded = forged.getHeader().getJWK();
+        assertNotNull(embedded, "jwk header must be present");
+        assertFalse(embedded.isPrivate(), "only the public key may be embedded");
+        assertTrue(forged.verify(new RSASSAVerifier(embedded.toRSAKey())), "signature must verify with the embedded key - that's what the server will do");
+    }
+
+    @Test
+    void jwkInjection_appliesTamperedPayload() throws Exception {
+        String tampered = "{\"sub\":\"administrator\"}";
+        ForgedToken f = forger.forgeJwkInjection(hs256(SECRET), attackerKey, tampered);
+        assertTrue(f.success(), f.errorMessage());
+
+        SignedJWT forged = SignedJWT.parse(f.forgedToken());
+        assertEquals("administrator", forged.getJWTClaimsSet().getSubject());
+        assertTrue(forged.verify(new RSASSAVerifier(forged.getHeader().getJWK().toRSAKey())));
+    } 
+
+    @Test
+    void jwkInjection_publicOnlyKey_isRejected() {
+        ForgedToken f = forger.forgeJwkInjection("a.b.c", attackerKey.toPublicJWK(), null);
+        assertFalse(f.success());
+    }
+
+    @Test
+    void jwkInjection_invalidPayloadJson_isRejected() throws Exception {
+        ForgedToken f = forger.forgeJwkInjection(hs256(SECRET), attackerKey, "{broken");
+        assertFalse(f.success());
+        assertTrue(f.errorMessage().toLowerCase().contains("json"));
+
+    } 
 }

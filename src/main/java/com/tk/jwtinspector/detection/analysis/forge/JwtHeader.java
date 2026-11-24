@@ -37,7 +37,7 @@ final class JwtHeader {
     }
 
     /** Set or overwrite a header field; returns this for chaining. */
-    JwtHeader put(String key, String value) {
+    JwtHeader put(String key, Object value) {
         claims.put(key, value);
         return this;
     }

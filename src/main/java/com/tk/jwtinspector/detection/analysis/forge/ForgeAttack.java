@@ -31,7 +31,15 @@ public enum ForgeAttack
             "Re-signs the token with HS256 using the server's PUBLIC key as the HMAC secret. "
                     + "Succeeds when the server verifies with an algorithm-agnostic key, so a "
                     + "verifier expecting RS256 is tricked into running HMAC with the public key "
-                    + "it already trusts — a full signature bypass without cracking anything.");
+                    + "it already trusts — a full signature bypass without cracking anything."),
+
+    /** Sign with an attacker key pair and embed its public JWK in the header. */
+    JWK_INJECTION("JWK header injection",
+            "Signs the token with a freshly generated RSA key and embeds that key's public half "
+                    + "in the 'jwk' header. Succeeds when the server verifies the signature with "
+                    + "whatever key the token supplies instead of a key it already trusts — a full "
+                    + "bypass with no secret and no server key needed.");
+
 
     private final String displayName;
     private final String description;
