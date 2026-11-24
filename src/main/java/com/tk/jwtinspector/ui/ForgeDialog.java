@@ -5,6 +5,8 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.HttpService;
 import com.nimbusds.jose.util.Base64URL;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.jwk.RSAKey;
 import com.tk.jwtinspector.detection.DetectedToken;
 import com.tk.jwtinspector.detection.TokenStore;
 import com.tk.jwtinspector.detection.analysis.forge.ForgeAttack;
@@ -87,6 +89,7 @@ public class ForgeDialog extends JDialog {
         tabs.addTab("kid injection", new KidInjectionTab());
         tabs.addTab("Modify claims", new ClaimTamperTab());
         tabs.addTab("alg confusion", new AlgConfusionTab());
+        tabs.addTab("JWK injection", new JwkInjectionTab());
 
         root.add(tabs, BorderLayout.CENTER);
 
@@ -304,10 +307,50 @@ public class ForgeDialog extends JDialog {
             }
         }
     }.execute();
-}
+        }
+    
+        // ---- Tab 5: JWK header injection ----
+    private class JwkInjectionTab extends ForgeTab {
+        private JTextArea payloadArea;
+        private RSAKey attackerKey;   // created on first Generate, then reused
 
+        JwkInjectionTab() {
+            super(ForgeAttack.JWK_INJECTION);
+        }
+
+        @Override
+        protected void buildInputs(JPanel inputs) {
+            payloadArea = new JTextArea(6, 40);
+            payloadArea.setText(originalPayloadJsonOrEmpty());
+            payloadArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+            payloadArea.setLineWrap(true);
+            payloadArea.setWrapStyleWord(false);
+
+            inputs.add(new JLabel("Payload JSON (optional tamper):"), gbc(0, 0, 2));
+            JScrollPane payloadScroll = new JScrollPane(payloadArea);
+            payloadScroll.setPreferredSize(new Dimension(500, 120));
+            inputs.add(payloadScroll, gbc(0, 1, 2));
+
+            inputs.add(hint("No key needed: the first Generate creates a fresh RSA key pair, "
+                    + "embeds its public half in the 'jwk' header and signs with the private half. "
+                    + "The same key is reused until you close this dialog."), gbc(0, 2, 2));
+        }
+
+        @Override
+        protected ForgedToken doForge() {
+            if (attackerKey == null) {
+                try {
+                    attackerKey = TokenForger.newAttackerKey();
+                } catch (JOSEException e) {
+                    return ForgedToken.failure(ForgeAttack.JWK_INJECTION,
+                            "Could not generate a key pair: " + e.getMessage());
+                }
+            }
+            return forger.forgeJwkInjection(token.rawToken(), attackerKey, payloadArea.getText());
+        }
     }
 
+}
     // ---- Shared base for the three tab panels ----
     private abstract class ForgeTab extends JPanel {
         protected final ForgeAttack attack;
