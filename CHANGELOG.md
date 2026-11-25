@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### New
+- **Key-source header check.** Flags `jku`, `x5u`, `jwk` and `x5c` headers, which tell the server where to get its verification key, as MEDIUM findings with remediation advice.
+
+### Quality
+- 42 unit tests (up from 36).
+
 ## 1.1.0
 
 Two new attacks against RS256 tokens, and a forge dialog that's easier to use.

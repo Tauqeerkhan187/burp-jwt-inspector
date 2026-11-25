@@ -9,6 +9,7 @@ import com.tk.jwtinspector.detection.analysis.checks.LongLifetimeCheck;
 import com.tk.jwtinspector.detection.analysis.checks.MissingClaimsCheck;
 import com.tk.jwtinspector.detection.analysis.checks.MissingExpirationCheck;
 import com.tk.jwtinspector.detection.analysis.checks.WeakAlgorithmCheck;
+import com.tk.jwtinspector.detection.analysis.checks.KeySourceHeaderCheck;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,6 +34,7 @@ public class TokenAnalyzer {
                 new MissingExpirationCheck(),
                 new LongLifetimeCheck(),
                 new KidInjectionCheck(),
+                new KeySourceHeaderCheck(),
                 new MissingClaimsCheck()
         );
     }
