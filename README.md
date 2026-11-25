@@ -13,15 +13,20 @@ A Burp Suite extension that automates the full JWT attack chain — **detect, an
 ## What it does
 
 - **Passively detects** JWTs in every request and response Burp proxies — Authorization headers, Cookie headers, custom auth headers, query parameters, request bodies, response bodies.
-- **Analyses** every token against six vulnerability checks with severity-ranked findings: `alg:none`, weak algorithm, missing expiration, long lifetime, `kid` injection patterns, missing standard claims.
+
+- **Analyses** every token against seven vulnerability checks with severity-ranked findings: `alg:none`, weak algorithm, missing expiration, long lifetime, `kid` injection patterns, key-source headers (`jku`, `x5u`, `jwk`, `x5c`), missing standard claims.
+
 - **Cracks** HMAC secrets offline at over a million attempts per second against a bundled 103,793-entry wordlist of real-world leaks (Wallarm's `jwt.secrets.list` merged with framework defaults). Custom wordlists supported via the Browse button.
+
 - **Forges** five attacks from any detected token:
   - `alg:none` signature stripping
   - `kid` header injection (path traversal, SQL and shell payloads)
   - claim tampering, re-signed with a known (typically cracked) HMAC secret
   - **algorithm confusion** (RS256 → HS256), with one-click **JWKS auto-fetch** of the server's public key
   - **JWK header injection**, signing with a generated key pair and embedding its public half in the header
+
 - **Verifies** each forged token against the live server: it replays the forged token next to the real one and reports **ACCEPTED**, **REJECTED** or **INCONCLUSIVE** from the difference between the responses, instead of assuming HTTP 200 means success.
+
 - **Replays** forged tokens straight into Burp's Repeater with one click, substituting the forged token wherever the original was observed (Authorization header, cookie, custom header or body).
 
 ## Why this exists
