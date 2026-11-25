@@ -75,7 +75,7 @@ One-click replay: the forged token is substituted into the original request's au
 git clone https://github.com/Tauqeerkhan187/burp-jwt-inspector.git
 cd burp-jwt-inspector
 ./gradlew clean build
-# Output: build/libs/burp-jwt-inspector-1.1.0.jar
+# Output: build/libs/jwt-inspector-1.1.0.jar
 ```
 
 The build uses Gradle Kotlin DSL with the Shadow plugin to produce a self-contained JAR, including Nimbus JOSE+JWT 10.0.2 and the bundled wordlist.
