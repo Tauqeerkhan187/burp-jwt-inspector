@@ -65,4 +65,10 @@ public class TokenAnalyzer {
         all.sort((a, b) -> b.severity().compareTo(a.severity()));
         return all;
     }
+
+    /** Ids of the registered checks, in the order they run. Used for the startup summary. */
+    public List<String> checkIds() {
+
+        return checks.stream().map(VulnerabilityCheck::id).toList();
+    }
 }
