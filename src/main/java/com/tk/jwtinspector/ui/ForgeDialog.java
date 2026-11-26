@@ -51,10 +51,10 @@ import java.awt.datatransfer.StringSelection;
  * @author TK
  * @since 2026-05-11
  *
- * Purpose: Hosts three tabs (alg:none, kid injection, claim tamper), each
- * exposing Copy and Send-to-Repeater actions on the forged token. The
- * Repeater action replaces the original request's Authorization header
- * (or session cookie if no Authorization is present) with the forged token.
+ * Purpose: Hosts five tabs (alg:none, kid injection, claim tampering, algorithm
+ * confusion, JWK injection), each with Copy, Send to Repeater and Verify on
+ * server actions on the forged token. The forged token is substituted wherever
+ * the original was observed (see TokenSubstitution).
  */
 public class ForgeDialog extends JDialog {
 
@@ -219,7 +219,7 @@ public class ForgeDialog extends JDialog {
             pubKeyArea.setLineWrap(true);
             pubKeyArea.setWrapStyleWord(false);
             pubKeyArea.setToolTipText(
-                    "The server's PUBLIC key, exactly as it stores it - usually PEM" +
+                    "The server's PUBLIC key, exactly as it stores it - usually PEM " +
                     "incl. the BEGIN/END lines and a trailing newline."
                     );
 
@@ -231,7 +231,15 @@ public class ForgeDialog extends JDialog {
 
             JPanel keyHeader = new JPanel(new BorderLayout());
             keyHeader.add(new JLabel("Server public key (PEM):"), BorderLayout.WEST);
-            keyHeader.add(fetchButton, BorderLayout.EAST);
+            JButton recoverButton = new JButton("Recover key (sig2n)");
+            recoverButton.setToolTipText("No JWKS? Recover the public key from two captured tokens "
+                    + "with PortSwigger's sig2n tool.");
+            recoverButton.addActionListener(e -> onRecoverKey());
+
+            JPanel keyButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+            keyButtons.add(recoverButton);
+            keyButtons.add(fetchButton);
+            keyHeader.add(keyButtons, BorderLayout.EAST);
             inputs.add(keyHeader, gbc(0, 0, 2));
 
             JScrollPane keyScroll = new JScrollPane(pubKeyArea);
@@ -264,7 +272,7 @@ public class ForgeDialog extends JDialog {
                     payloadArea.getText());
         }
 
-            private void onFetchKey() {
+        private void onFetchKey() {
             HttpRequest original = token.originalRequest();
             if (original == null) {
                 setStatus("No original request captured, so the server's host is unknown.",
@@ -303,6 +311,14 @@ public class ForgeDialog extends JDialog {
                     }
                 }
             }.execute();
+        }
+
+        private void onRecoverKey() {
+            new KeyRecoveryDialog(ForgeDialog.this, token, store, api, pem -> {
+                pubKeyArea.setText(pem);
+                pubKeyArea.setCaretPosition(0);
+                setStatus("Loaded public key recovered with sig2n.", new Color(0x1A, 0x86, 0x1A));
+            }).setVisible(true);
         }
     }
 
@@ -347,7 +363,7 @@ public class ForgeDialog extends JDialog {
         }
     }
 
-    // ---- Shared base for the three tab panels ----
+    // ---- Shared base for the forge tab panels ----
     private abstract class ForgeTab extends JPanel {
         protected final ForgeAttack attack;
         private final JTextArea outputArea = new JTextArea(4, 40);
@@ -390,9 +406,9 @@ public class ForgeDialog extends JDialog {
             copyButton.setEnabled(false);
             sendToRepeaterButton.setEnabled(false);
             verifyButton.setEnabled(false);
-            verifyButton.setToolTipText("Replays the forged token against the server and " 
-                    + "comapares the response to the real token. Most meaningful for a token "
-                    + " captured in request to a protected endpoint. ");
+            verifyButton.setToolTipText("Replays the forged token against the server and "
+                    + "compares the response to the real token. Most meaningful for a token "
+                    + "captured in a request to a protected endpoint.");
             outputRow.add(copyButton);
             outputRow.add(sendToRepeaterButton);
             outputRow.add(verifyButton);
@@ -571,66 +587,9 @@ public class ForgeDialog extends JDialog {
         }
 
 
-        /**
-         * Returns a copy of `original` with the JWT replaced. We try to be smart:
-         *   - If Authorization header carried the token, swap it
-         *   - If a Cookie carried the token, splice it inside the cookie value
-         *   - Otherwise fall back to a body/URL string replace
-         */
+        /** Puts the forged token where the original was observed (see TokenSubstitution). */
         private HttpRequest replaceTokenInRequest(HttpRequest original, String forged) {
-            String originalToken = token.rawToken();
-
-            switch (token.source()) {
-                case REQUEST_HEADER -> {
-                    String headerName = token.sourceDetail();
-                    if ("Authorization".equalsIgnoreCase(headerName)) {
-                        return original.withRemovedHeader("Authorization")
-                                .withAddedHeader("Authorization", "Bearer " + forged);
-                    }
-                    if ("Cookie".equalsIgnoreCase(headerName)) {
-                        String oldCookie = original.headerValue("Cookie");
-                        if (oldCookie != null && oldCookie.contains(originalToken)) {
-                            String newCookie = oldCookie.replace(originalToken, forged);
-                            return original.withRemovedHeader("Cookie")
-                                    .withAddedHeader("Cookie", newCookie);
-                        }
-                    }
-                    // generic custom header
-                    String oldValue = original.headerValue(headerName);
-                    if (oldValue != null && oldValue.contains(originalToken)) {
-                        String newValue = oldValue.replace(originalToken, forged);
-                        return original.withRemovedHeader(headerName)
-                                .withAddedHeader(headerName, newValue);
-                    }
-                }
-                case RESPONSE_HEADER, RESPONSE_BODY -> {
-                    // Token came from server; no obvious place to inject into the
-                    // initiating request. Try the cookie jar as a sensible default
-                    // since servers often set tokens via Set-Cookie that the client
-                    // then sends as Cookie.
-                    String oldCookie = original.headerValue("Cookie");
-                    if (oldCookie != null) {
-                        String newCookie = oldCookie.contains(originalToken)
-                                ? oldCookie.replace(originalToken, forged)
-                                : oldCookie + "; session=" + forged;
-                        return original.withRemovedHeader("Cookie")
-                                .withAddedHeader("Cookie", newCookie);
-                    }
-                    return original.withAddedHeader("Cookie", "session=" + forged);
-                }
-                case REQUEST_BODY, REQUEST_PARAM -> {
-                    // Fall through to body/URL string replace below
-                }
-            }
-
-            // Last-resort fallback: replace anywhere in the request body
-            String body = original.bodyToString();
-            if (body.contains(originalToken)) {
-                return original.withBody(body.replace(originalToken, forged));
-            }
-
-            // Couldn't find the token anywhere to substitute — append as Authorization
-            return original.withAddedHeader("Authorization", "Bearer " + forged);
+            return TokenSubstitution.withForgedToken(token, original, forged);
         }
 
         protected GridBagConstraints gbc(int x, int y, int width) {
